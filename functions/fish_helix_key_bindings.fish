@@ -106,7 +106,11 @@ function __fish_helix_normal_k --description 'Helix normal mode: collapse select
     set -l count (__fish_helix_consume_count)
     commandline -f end-selection
     for i in (seq $count)
-        commandline -f up-or-search
+        if functions -q up-or-search
+            up-or-search
+        else
+            commandline -f up-line
+        end
     end
     commandline -f repaint-mode
 end
@@ -115,7 +119,11 @@ function __fish_helix_normal_j --description 'Helix normal mode: collapse select
     set -l count (__fish_helix_consume_count)
     commandline -f end-selection
     for i in (seq $count)
-        commandline -f down-or-search
+        if functions -q down-or-search
+            down-or-search
+        else
+            commandline -f down-line
+        end
     end
     commandline -f repaint-mode
 end
@@ -243,8 +251,8 @@ function __fish_helix_indent --description 'Helix: indent line or selection (>)'
     set -l cur_line "$lines[$line_no]"
 
     set lines[$line_no] "    $cur_line"
-    set -l new_buf (string join \n $lines)
-    commandline -r "$new_buf"
+    set -l new_buf (string join \n -- $lines)
+    commandline -r -- "$new_buf"
     commandline -f repaint-mode
     set fish_bind_mode default
 end
@@ -255,8 +263,8 @@ function __fish_helix_unindent --description 'Helix: unindent line or selection 
     set -l cur_line "$lines[$line_no]"
 
     set lines[$line_no] (string replace -r '^ {1,4}' '' -- "$cur_line")
-    set -l new_buf (string join \n $lines)
-    commandline -r "$new_buf"
+    set -l new_buf (string join \n -- $lines)
+    commandline -r -- "$new_buf"
     commandline -f repaint-mode
     set fish_bind_mode default
 end

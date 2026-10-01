@@ -158,12 +158,48 @@ assert_contains "$bind_h" "__fish_helix_normal_h" "h in normal mode collapses se
 set -l bind_l (bind -M default l | string trim)
 assert_contains "$bind_l" "__fish_helix_normal_l" "l in normal mode collapses selection and moves right (Helix)"
 
+set -l bind_k (bind -M default k | string trim)
+assert_contains "$bind_k" "__fish_helix_normal_k" "k in normal mode collapses selection and moves up (Helix)"
+
+set -l bind_j (bind -M default j | string trim)
+assert_contains "$bind_j" "__fish_helix_normal_j" "j in normal mode collapses selection and moves down (Helix)"
+
+# Verify k and j execution does not throw 'Unknown input function' error
+set -l exec_output (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    fish_helix_key_bindings default
+    __fish_helix_normal_k
+    __fish_helix_normal_j
+" 2>&1)
+set -l err_match (string match "*Unknown input function*" -- "$exec_output")
+assert_equal "$err_match" "" "Executing normal mode k and j does not trigger Unknown input function error"
+
 # Indent / Unindent
 set -l bind_indent (bind -M default \> | string trim)
 assert_contains "$bind_indent" "__fish_helix_indent" "> indents line"
 
 set -l bind_unindent (bind -M default \< | string trim)
 assert_contains "$bind_unindent" "__fish_helix_unindent" "< unindents line"
+
+# Multi-line indent/unindent with flag-like lines
+set -l multiline_indent_res (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'ls \\\n-l'
+    commandline -C 5
+    __fish_helix_indent
+    commandline -b
+" 2>&1 | string match "*ls*-l*" | string length)
+if test -n "$multiline_indent_res" -a "$multiline_indent_res" -gt 0
+    set -g passed (math $passed + 1)
+    set_color green
+    echo "  ✓ PASS: Indenting multi-line commands with leading flags succeeds without option errors"
+    set_color normal
+else
+    set -g failed (math $failed + 1)
+    set_color red
+    echo "  ✗ FAIL: Indenting multi-line commands with leading flags failed"
+    set_color normal
+end
 
 # 4. Verify Visual (Select / Extend) Mode bindings
 echo
