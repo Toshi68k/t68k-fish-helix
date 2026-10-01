@@ -70,6 +70,8 @@ In Helix Normal mode, movements **select/replace** the range. Pressing `d` delet
 | `Alt+,` | Repeat last jump motion in reverse (`repeat-jump-reverse`) |
 | `h` / `l` | Collapse active selection and move left / right 1 character |
 | `j` / `k` | History search down / up (or multi-line navigation) |
+| `/` / `?` | Search command history interactively (`history-pager`) |
+| `n` / `N` | Cycle backward / forward through matching history commands (`search_next`/`prev`) |
 | `x` | Select current line (including newline); pressing `x` again extends to the next line (`extend_line_below`) |
 | `X` | Extend selection to whole line bounds (`extend_to_line_bounds`) |
 | `%` | Select entire command line buffer |
@@ -182,6 +184,22 @@ Actions execute immediately on whatever is currently selected:
 | `<space>f` | Search completions and files (`complete-and-search`) |
 | `<space>b` | Open interactive command history pager (`history-pager`) |
 | `<space>c` | Toggle comment prefix on command line (`#`) |
+
+---
+
+### 8. Search & History (`/`, `?`, `n`, `N`)
+
+Helix search motions are mapped directly to Fish's interactive history engine:
+
+| Key | Helix Command | Description |
+|---|---|---|
+| `/` | `search` | Open interactive history search pager in insert mode (`history-pager`) |
+| `?` | `rsearch` | Open interactive history search pager in insert mode (`history-pager`) |
+| `n` | `search_next` | Step backward to next matching history entry (`history-search-backward`) |
+| `N` | `search_prev` | Step forward to previous matching history entry (`history-search-forward`) |
+
+> [!TIP]
+> If you already have text on the command line (e.g. `git checkout`), pressing `/` or `?` automatically pre-filters the interactive history pager for matching commands.
 
 ---
 
@@ -303,7 +321,7 @@ t68k-fish-helix/
 │   ├── __fish_helix_surround.fish                     # Surround add & pair matching ('ms')
 │   └── __fish_helix_yank.fish                         # Selection-first yank ('y')
 └── tests/
-    └── test_helix_bindings.fish                       # 51 automated unit and regression tests
+    └── test_helix_bindings.fish                       # 67 automated unit and regression tests
 ```
 
 ---

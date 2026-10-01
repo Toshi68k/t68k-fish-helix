@@ -572,6 +572,14 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M default ' ',b history-pager
     bind --preset -M default ' ',c __fish_toggle_comment_commandline
 
+    # --- Search / History ---
+    # / and ? open interactive history search and enter insert mode (Helix search)
+    bind --preset -m insert -M default / history-pager repaint-mode
+    bind --preset -m insert -M default \? history-pager repaint-mode
+    # n and N cycle through matching history commands (Helix search next/prev)
+    bind --preset -M default n history-search-backward
+    bind --preset -M default N history-search-forward
+
     # --- Single Character Replace Mode (r) ---
     bind --preset -M default -m helix_replace_one r repaint-mode
     bind --preset -M helix_replace_one -m default '' 'set -g fish_cursor_end_mode exclusive; commandline -f delete-char self-insert backward-char repaint-mode; set -g fish_cursor_end_mode inclusive'
@@ -658,6 +666,12 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
 
     bind --preset -M visual u undo
     bind --preset -M visual U redo
+
+    # Search / History in visual mode
+    bind --preset -m insert -M visual / 'commandline -f end-selection repaint-mode; history-pager'
+    bind --preset -m insert -M visual \? 'commandline -f end-selection repaint-mode; history-pager'
+    bind --preset -M visual -m default n 'commandline -f end-selection history-search-backward repaint-mode'
+    bind --preset -M visual -m default N 'commandline -f end-selection history-search-forward repaint-mode'
 
     bind --preset -M visual ' ',y 'fish_clipboard_copy; commandline -f end-selection repaint-mode; set fish_bind_mode default'
     bind --preset -M visual ' ',p fish_clipboard_paste

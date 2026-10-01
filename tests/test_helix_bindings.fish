@@ -115,6 +115,21 @@ assert_contains "$bind_sp_y" "fish_clipboard_copy" "<space>y copies to clipboard
 set -l bind_sp_p (bind -M default ' ',p | string trim)
 assert_contains "$bind_sp_p" "fish_clipboard_paste" "<space>p pastes from clipboard (Helix Space mode)"
 
+# Search / History in Normal mode
+set -l bind_slash (bind -M default / | string trim)
+assert_contains "$bind_slash" "history-pager" "/ in normal mode invokes history-pager"
+assert_contains "$bind_slash" "insert" "/ in normal mode transitions to insert mode"
+
+set -l bind_qmark (bind -M default \? | string trim)
+assert_contains "$bind_qmark" "history-pager" "? in normal mode invokes history-pager"
+assert_contains "$bind_qmark" "insert" "? in normal mode transitions to insert mode"
+
+set -l bind_n (bind -M default n | string trim)
+assert_contains "$bind_n" "history-search-backward" "n in normal mode searches history backward (Helix search_next)"
+
+set -l bind_N (bind -M default N | string trim)
+assert_contains "$bind_N" "history-search-forward" "N in normal mode searches history forward (Helix search_prev)"
+
 # Insert mode transitions
 set -l bind_i (bind -M default i | string trim)
 assert_contains "$bind_i" "insert" "i enters insert mode"
@@ -228,6 +243,21 @@ assert_contains "$bind_vis_t_enter" "end-of-line" "v-t-enter in visual mode exte
 
 set -l bind_vis_f_enter (bind -M visual f,enter | string trim)
 assert_contains "$bind_vis_f_enter" "end-of-line" "v-f-enter in visual mode extends selection to end-of-line"
+
+# Search / History in visual mode
+set -l bind_vis_slash (bind -M visual / | string trim)
+assert_contains "$bind_vis_slash" "history-pager" "/ in visual mode invokes history-pager"
+assert_contains "$bind_vis_slash" "end-selection" "/ in visual mode collapses selection"
+
+set -l bind_vis_qmark (bind -M visual \? | string trim)
+assert_contains "$bind_vis_qmark" "history-pager" "? in visual mode invokes history-pager"
+assert_contains "$bind_vis_qmark" "end-selection" "? in visual mode collapses selection"
+
+set -l bind_vis_n (bind -M visual n | string trim)
+assert_contains "$bind_vis_n" "history-search-backward" "n in visual mode searches history backward"
+
+set -l bind_vis_N (bind -M visual N | string trim)
+assert_contains "$bind_vis_N" "history-search-forward" "N in visual mode searches history forward"
 
 # 5. Verify Mode Prompt
 echo
