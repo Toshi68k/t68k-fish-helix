@@ -106,6 +106,16 @@ function __fish_helix_normal_k --description 'Helix normal mode: collapse select
     set -l count (__fish_helix_consume_count)
     commandline -f end-selection
     for i in (seq $count)
+        if test "$fish_helix_atuin_up" = true -a $count -eq 1; and __fish_helix_is_atuin_enabled
+            if not functions -q _atuin_bind_up; and type -q atuin
+                atuin init fish | source
+            end
+            if functions -q _atuin_bind_up
+                _atuin_bind_up
+                continue
+            end
+        end
+
         if functions -q up-or-search
             up-or-search
         else
@@ -375,6 +385,78 @@ if not functions -q fish_helix_cursor
 end
 
 # ==============================================================================
+# History & Atuin Integration Helpers
+# ==============================================================================
+
+function __fish_helix_is_atuin_enabled --description 'Check if Atuin integration is enabled and available'
+    # 1. Explicit user disable
+    if test "$fish_helix_atuin" = false
+        return 1
+    end
+
+    # 2. Explicit user enable
+    if test "$fish_helix_atuin" = true
+        if functions -q _atuin_search; or type -q atuin
+            return 0
+        end
+        return 1
+    end
+
+    # 3. Auto mode (default when unset or set to 'auto')
+    if functions -q _atuin_search; or type -q atuin
+        return 0
+    end
+
+    return 1
+end
+
+function __fish_helix_atuin_search --description 'Helix-aware wrapper for Atuin search'
+    # Auto-initialize Atuin on demand if installed but not yet sourced
+    if not functions -q _atuin_search
+        if type -q atuin
+            atuin init fish | source
+        end
+    end
+
+    if functions -q _atuin_search
+        # Temporarily spoof fish_vi_key_bindings so Atuin selects vim-normal or vim-insert
+        set -l orig_bindings $fish_key_bindings
+        set -g fish_key_bindings fish_vi_key_bindings
+        _atuin_search $argv
+        set -g fish_key_bindings $orig_bindings
+    else
+        history-pager
+    end
+end
+
+function __fish_helix_history_search --description 'History search dispatcher (Helix /, ?, Space-b, Ctrl-r)'
+    if __fish_helix_is_atuin_enabled
+        __fish_helix_atuin_search $argv
+    else
+        set fish_bind_mode insert
+        commandline -f history-pager repaint-mode
+    end
+end
+
+function __fish_helix_up --description 'Up arrow dispatcher (respects fish_helix_atuin_up)'
+    if test "$fish_helix_atuin_up" = true; and __fish_helix_is_atuin_enabled
+        if not functions -q _atuin_bind_up; and type -q atuin
+            atuin init fish | source
+        end
+        if functions -q _atuin_bind_up
+            _atuin_bind_up
+            return
+        end
+    end
+
+    if functions -q up-or-search
+        up-or-search
+    else
+        commandline -f up-line
+    end
+end
+
+# ==============================================================================
 # Main key bindings entry point
 # ==============================================================================
 function fish_helix_key_bindings --description 'Helix-like modal key bindings for fish'
@@ -438,10 +520,13 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M insert \e\b backward-kill-word
     bind --preset -M insert ctrl-u backward-kill-line
     bind --preset -M insert ctrl-k kill-line
+    bind --preset -M insert ctrl-r __fish_helix_history_search
+    bind --preset -M insert up __fish_helix_up
 
     # Normal mode backspace & delete
     bind --preset -M default backspace backward-char
     bind --preset -M default delete delete-char
+    bind --preset -M default up __fish_helix_up
 
     # Cancel commandline / clear
     bind --preset -M default ctrl-c clear-commandline repaint-mode
@@ -569,8 +654,17 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M default ' ',p fish_clipboard_paste
     bind --preset -M default ' ',P fish_clipboard_paste
     bind --preset -M default ' ',f complete-and-search
-    bind --preset -M default ' ',b history-pager
+    bind --preset -M default ' ',b __fish_helix_history_search
     bind --preset -M default ' ',c __fish_toggle_comment_commandline
+
+    # --- Search / History ---
+    # / and ? open interactive history search (dispatches to Atuin if enabled, otherwise native history-pager)
+    bind --preset -M default / __fish_helix_history_search
+    bind --preset -M default \? __fish_helix_history_search
+    bind --preset -M default ctrl-r __fish_helix_history_search
+    # n and N cycle through matching history commands (Helix search next/prev)
+    bind --preset -M default n history-search-backward
+    bind --preset -M default N history-search-forward
 
     # --- Single Character Replace Mode (r) ---
     bind --preset -M default -m helix_replace_one r repaint-mode
@@ -658,6 +752,14 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
 
     bind --preset -M visual u undo
     bind --preset -M visual U redo
+
+    # Search / History in visual mode
+    bind --preset -M visual / 'commandline -f end-selection repaint-mode; __fish_helix_history_search'
+    bind --preset -M visual \? 'commandline -f end-selection repaint-mode; __fish_helix_history_search'
+    bind --preset -M visual ctrl-r 'commandline -f end-selection repaint-mode; __fish_helix_history_search'
+    bind --preset -M visual ' ',b 'commandline -f end-selection repaint-mode; __fish_helix_history_search'
+    bind --preset -M visual -m default n 'commandline -f end-selection history-search-backward repaint-mode'
+    bind --preset -M visual -m default N 'commandline -f end-selection history-search-forward repaint-mode'
 
     bind --preset -M visual ' ',y 'fish_clipboard_copy; commandline -f end-selection repaint-mode; set fish_bind_mode default'
     bind --preset -M visual ' ',p fish_clipboard_paste

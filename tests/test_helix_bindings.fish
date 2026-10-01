@@ -115,6 +115,32 @@ assert_contains "$bind_sp_y" "fish_clipboard_copy" "<space>y copies to clipboard
 set -l bind_sp_p (bind -M default ' ',p | string trim)
 assert_contains "$bind_sp_p" "fish_clipboard_paste" "<space>p pastes from clipboard (Helix Space mode)"
 
+# Search / History in Normal mode
+set -l bind_slash (bind -M default / | string trim)
+assert_contains "$bind_slash" "__fish_helix_history_search" "/ in normal mode invokes history search dispatcher"
+
+set -l bind_qmark (bind -M default \? | string trim)
+assert_contains "$bind_qmark" "__fish_helix_history_search" "? in normal mode invokes history search dispatcher"
+
+set -l bind_ctrl_r (bind -M default ctrl-r | string trim)
+assert_contains "$bind_ctrl_r" "__fish_helix_history_search" "Ctrl-r in normal mode invokes history search dispatcher"
+
+set -l bind_sp_b (bind -M default ' ',b | string trim)
+assert_contains "$bind_sp_b" "__fish_helix_history_search" "<space>b in normal mode invokes history search dispatcher"
+
+set -l bind_n (bind -M default n | string trim)
+assert_contains "$bind_n" "history-search-backward" "n in normal mode searches history backward (Helix search_next)"
+
+set -l bind_N (bind -M default N | string trim)
+assert_contains "$bind_N" "history-search-forward" "N in normal mode searches history forward (Helix search_prev)"
+
+# Insert mode history search (Ctrl-r) & Up arrow
+set -l bind_ins_ctrl_r (bind -M insert ctrl-r | string trim)
+assert_contains "$bind_ins_ctrl_r" "__fish_helix_history_search" "Ctrl-r in insert mode invokes history search dispatcher"
+
+set -l bind_ins_up (bind -M insert up | string trim)
+assert_contains "$bind_ins_up" "__fish_helix_up" "Up in insert mode invokes up dispatcher"
+
 # Insert mode transitions
 set -l bind_i (bind -M default i | string trim)
 assert_contains "$bind_i" "insert" "i enters insert mode"
@@ -229,6 +255,29 @@ assert_contains "$bind_vis_t_enter" "end-of-line" "v-t-enter in visual mode exte
 set -l bind_vis_f_enter (bind -M visual f,enter | string trim)
 assert_contains "$bind_vis_f_enter" "end-of-line" "v-f-enter in visual mode extends selection to end-of-line"
 
+# Search / History in visual mode
+set -l bind_vis_slash (bind -M visual / | string trim)
+assert_contains "$bind_vis_slash" "__fish_helix_history_search" "/ in visual mode invokes history search dispatcher"
+assert_contains "$bind_vis_slash" "end-selection" "/ in visual mode collapses selection"
+
+set -l bind_vis_qmark (bind -M visual \? | string trim)
+assert_contains "$bind_vis_qmark" "__fish_helix_history_search" "? in visual mode invokes history search dispatcher"
+assert_contains "$bind_vis_qmark" "end-selection" "? in visual mode collapses selection"
+
+set -l bind_vis_ctrl_r (bind -M visual ctrl-r | string trim)
+assert_contains "$bind_vis_ctrl_r" "__fish_helix_history_search" "Ctrl-r in visual mode invokes history search dispatcher"
+assert_contains "$bind_vis_ctrl_r" "end-selection" "Ctrl-r in visual mode collapses selection"
+
+set -l bind_vis_sp_b (bind -M visual ' ',b | string trim)
+assert_contains "$bind_vis_sp_b" "__fish_helix_history_search" "<space>b in visual mode invokes history search dispatcher"
+assert_contains "$bind_vis_sp_b" "end-selection" "<space>b in visual mode collapses selection"
+
+set -l bind_vis_n (bind -M visual n | string trim)
+assert_contains "$bind_vis_n" "history-search-backward" "n in visual mode searches history backward"
+
+set -l bind_vis_N (bind -M visual N | string trim)
+assert_contains "$bind_vis_N" "history-search-forward" "N in visual mode searches history forward"
+
 # 5. Verify Mode Prompt
 echo
 echo "--- Testing Mode Prompt ---"
@@ -273,6 +322,76 @@ set -g __fish_helix_count "12"
 set -l consumed (__fish_helix_consume_count)
 assert_equal "$consumed" "12" "Count accumulation consumed correctly"
 assert_equal "$__fish_helix_count" "" "Count reset after consumption"
+
+# 7. Verify Atuin & History Search Integration
+echo
+echo "--- Testing Atuin & History Search Integration ---"
+
+# Atuin enable check
+set -l orig_atuin $fish_helix_atuin
+set -g fish_helix_atuin false
+set -l disabled_res 0
+if not __fish_helix_is_atuin_enabled
+    set disabled_res 1
+end
+assert_equal "$disabled_res" "1" "fish_helix_atuin=false correctly disables atuin"
+
+set -g fish_helix_atuin true
+set -l enabled_res 0
+if __fish_helix_is_atuin_enabled
+    set enabled_res 1
+end
+assert_equal "$enabled_res" "1" "fish_helix_atuin=true enables atuin when binary or function present"
+
+# Atuin keymap mode spoofing (default mode -> vim-normal, insert mode -> vim-insert)
+set -l spoof_res (fish --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    set -g fish_key_bindings fish_helix_key_bindings
+    set -g fish_bind_mode default
+    function _atuin_search
+        set -l keymap_mode
+        switch \$fish_key_bindings
+            case fish_vi_key_bindings fish_hybrid_key_bindings
+                switch \$fish_bind_mode
+                    case default
+                        set keymap_mode vim-normal
+                    case insert
+                        set keymap_mode vim-insert
+                end
+            case '*'
+                set keymap_mode emacs
+        end
+        echo \$keymap_mode
+    end
+    __fish_helix_atuin_search
+" 2>&1 | string trim)
+assert_equal "$spoof_res" "vim-normal" "Atuin search receives vim-normal mode in default mode"
+
+set -l spoof_res_ins (fish --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    set -g fish_key_bindings fish_helix_key_bindings
+    set -g fish_bind_mode insert
+    function _atuin_search
+        set -l keymap_mode
+        switch \$fish_key_bindings
+            case fish_vi_key_bindings fish_hybrid_key_bindings
+                switch \$fish_bind_mode
+                    case default
+                        set keymap_mode vim-normal
+                    case insert
+                        set keymap_mode vim-insert
+                end
+            case '*'
+                set keymap_mode emacs
+        end
+        echo \$keymap_mode
+    end
+    __fish_helix_atuin_search
+" 2>&1 | string trim)
+assert_equal "$spoof_res_ins" "vim-insert" "Atuin search receives vim-insert mode in insert mode"
+
+# Restore original atuin setting
+set -g fish_helix_atuin $orig_atuin
 
 echo
 echo "================================================="
