@@ -30,6 +30,15 @@ if not set -q fish_helix_show_mode_prompt
     end
 end
 
+# Atuin integration settings ('auto', true, false)
+if not set -q fish_helix_atuin
+    set -g fish_helix_atuin auto
+end
+
+if not set -q fish_helix_atuin_up
+    set -g fish_helix_atuin_up false
+end
+
 # Provide prompt integration if user enables it or if default fish_mode_prompt is used
 if not functions -q __fish_helix_original_mode_prompt
     if functions -q fish_mode_prompt

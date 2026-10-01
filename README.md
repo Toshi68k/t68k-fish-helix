@@ -187,19 +187,41 @@ Actions execute immediately on whatever is currently selected:
 
 ---
 
-### 8. Search & History (`/`, `?`, `n`, `N`)
+### 8. Search & History (`/`, `?`, `n`, `N`, `Ctrl-r`)
 
-Helix search motions are mapped directly to Fish's interactive history engine:
+Helix search motions are routed through a dynamic history dispatcher with native **[Atuin](https://atuin.sh/)** support:
 
 | Key | Helix Command | Description |
 |---|---|---|
-| `/` | `search` | Open interactive history search pager in insert mode (`history-pager`) |
-| `?` | `rsearch` | Open interactive history search pager in insert mode (`history-pager`) |
+| `/` | `search` | Open interactive history search (Atuin TUI or native `history-pager`) |
+| `?` | `rsearch` | Open interactive history search (Atuin TUI or native `history-pager`) |
+| `Ctrl-r` | history search | Open interactive history search in Normal, Insert, and Visual modes |
+| `<space>b` | buffer/history | Open interactive history search (Atuin TUI or native `history-pager`) |
 | `n` | `search_next` | Step backward to next matching history entry (`history-search-backward`) |
 | `N` | `search_prev` | Step forward to previous matching history entry (`history-search-forward`) |
 
 > [!TIP]
-> If you already have text on the command line (e.g. `git checkout`), pressing `/` or `?` automatically pre-filters the interactive history pager for matching commands.
+> If you already have text on the command line (e.g. `git checkout`), pressing `/` or `?` automatically pre-filters the search for matching commands.
+
+#### 🪄 Configurable Atuin Integration
+
+If you use [Atuin](https://atuin.sh/) for shell history, `t68k-fish-helix` provides out-of-the-box, seamless integration:
+
+- **Modal Keymap Detection**: Atuin normally falls back to Emacs bindings when an unrecognized keybinding engine is active. `t68k-fish-helix` automatically provides Atuin with the correct modal state (`vim-normal` in Normal/Visual mode, `vim-insert` in Insert mode) so modal navigation works inside Atuin's TUI.
+- **Dynamic Fallback**: If Atuin is not installed or is disabled, search commands gracefully fall back to Fish's built-in interactive `history-pager`.
+
+**Configuration Options:**
+
+```fish
+# Atuin Integration Mode ('auto' [default], true, false)
+set -g fish_helix_atuin auto   # Automatically detect and use Atuin if installed
+set -g fish_helix_atuin true   # Force enable Atuin
+set -g fish_helix_atuin false  # Force disable Atuin (always use native Fish history-pager)
+
+# Up Arrow / 'k' Integration (true, false [default])
+set -g fish_helix_atuin_up false  # 'k' preserves pure Helix line/search navigation (default)
+set -g fish_helix_atuin_up true   # 'k' (on line 1) and Up arrow invoke Atuin's shell-up search
+```
 
 ---
 
@@ -321,7 +343,7 @@ t68k-fish-helix/
 │   ├── __fish_helix_surround.fish                     # Surround add & pair matching ('ms')
 │   └── __fish_helix_yank.fish                         # Selection-first yank ('y')
 └── tests/
-    └── test_helix_bindings.fish                       # 67 automated unit and regression tests
+    └── test_helix_bindings.fish                       # 77 automated unit and regression tests
 ```
 
 ---
