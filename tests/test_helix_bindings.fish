@@ -520,6 +520,62 @@ set -l test_to_mode (fish -i --no-config -c "
 " 2>&1 | tail -n 1 | string trim)
 assert_equal "$test_to_mode" "visual" "Textobject selection sets visual mode"
 
+# 9. Verify External Editor & Clipboard Selection Replace (Phase 2)
+echo
+echo "--- Testing External Editor & Clipboard Replace (Phase 2) ---"
+
+# External editor bindings
+set -l bind_sp_e_def (bind -M default ' ',e | string trim)
+assert_contains "$bind_sp_e_def" "edit_command_buffer" "<space>e in normal mode opens external editor"
+
+set -l bind_sp_e_vis (bind -M visual ' ',e | string trim)
+assert_contains "$bind_sp_e_vis" "edit_command_buffer" "<space>e in visual mode opens external editor"
+
+set -l bind_cx_ce_def (bind -M default ctrl-x,ctrl-e | string trim)
+assert_contains "$bind_cx_ce_def" "edit_command_buffer" "ctrl-x ctrl-e in normal mode opens external editor"
+
+set -l bind_cx_ce_ins (bind -M insert ctrl-x,ctrl-e | string trim)
+assert_contains "$bind_cx_ce_ins" "edit_command_buffer" "ctrl-x ctrl-e in insert mode opens external editor"
+
+# Clipboard replace bindings
+set -l bind_sp_R_def (bind -M default ' ',R | string trim)
+assert_contains "$bind_sp_R_def" "__fish_helix_replace_with_clipboard" "<space>R in normal mode replaces with clipboard"
+
+set -l bind_sp_R_vis (bind -M visual ' ',R | string trim)
+assert_contains "$bind_sp_R_vis" "__fish_helix_replace_with_clipboard" "<space>R in visual mode replaces with clipboard"
+
+# Interactive execution test: Replace with clipboard on selection
+set -l test_clip_sel (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'git checkout feature_branch'
+    function commandline
+        if contains -- --selection-start \$argv
+            echo 13
+            return 0
+        else if contains -- --selection-end \$argv
+            echo 27
+            return 0
+        else
+            builtin commandline \$argv
+        end
+    end
+    function fish_clipboard_paste; echo -n 'main'; end
+    __fish_helix_replace_with_clipboard
+    builtin commandline -b
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_clip_sel" "git checkout main" "Clipboard replace replaces active selection"
+
+# Interactive execution test: Replace with clipboard on char under cursor (no selection)
+set -l test_clip_char (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    function fish_clipboard_paste; echo -n 'X'; end
+    commandline -r -- 'abc'
+    commandline -C 1
+    __fish_helix_replace_with_clipboard
+    commandline -b
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_clip_char" "aXc" "Clipboard replace replaces char under cursor when no selection"
+
 echo
 echo "================================================="
 echo "Results: $passed Passed, $failed Failed"
