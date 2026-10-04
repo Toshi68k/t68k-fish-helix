@@ -281,17 +281,192 @@ end
 
 function __fish_helix_get_surround_pair --argument-names char
     switch $char
-        case '(' ')'
+        case '(' ')' 'b'
             echo '('\n')'
-        case '[' ']'
+        case '[' ']' 'r'
             echo '['\n']'
-        case '{' '}'
+        case '{' '}' 'B'
             echo '{'\n'}'
         case '<' '>'
             echo '<'\n'>'
         case '*'
             echo "$char"\n"$char"
     end
+end
+
+function __fish_helix_find_pair --argument-names char buf cursor_pos
+    set -l pair (__fish_helix_get_surround_pair "$char")
+    set -l open_c $pair[1]
+    set -l close_c $pair[2]
+    set -l len (string length -- "$buf")
+    if test $len -eq 0
+        return 1
+    end
+
+    if test "$open_c" != "$close_c"
+        # Bracket matching with nesting stack
+        set -l stack
+        set -l pairs
+        set -l i 0
+        while test $i -lt $len
+            set -l c (string sub -s (math $i + 1) -l 1 -- "$buf")
+            if test "$c" = "$open_c"
+                set -a stack $i
+            else if test "$c" = "$close_c"
+                if test (count $stack) -gt 0
+                    set -l o $stack[-1]
+                    set -e stack[-1]
+                    set -a pairs "$o $i"
+                end
+            end
+            set i (math $i + 1)
+        end
+
+        # Innermost enclosing pair (o <= cursor <= c, max o)
+        set -l best_o -1
+        set -l best_c -1
+        for p in $pairs
+            set -l parts (string split " " -- $p)
+            set -l o $parts[1]
+            set -l c $parts[2]
+            if test $cursor_pos -ge $o -a $cursor_pos -le $c
+                if test $o -gt $best_o
+                    set best_o $o
+                    set best_c $c
+                end
+            end
+        end
+        if test $best_o -ge 0
+            echo $best_o
+            echo $best_c
+            return 0
+        end
+
+        # Next pair after cursor
+        set -l next_o 999999
+        set -l next_c -1
+        for p in $pairs
+            set -l parts (string split " " -- $p)
+            set -l o $parts[1]
+            set -l c $parts[2]
+            if test $o -gt $cursor_pos -a $o -lt $next_o
+                set next_o $o
+                set next_c $c
+            end
+        end
+        if test $next_c -ge 0
+            echo $next_o
+            echo $next_c
+            return 0
+        end
+    else
+        # Symmetric quote/delimiter matching
+        set -l in_quote 0
+        set -l open_idx -1
+        set -l pairs
+        set -l i 0
+        set -l prev_char ""
+        while test $i -lt $len
+            set -l c (string sub -s (math $i + 1) -l 1 -- "$buf")
+            if test "$c" = "$open_c" -a "$prev_char" != "\\"
+                if test $in_quote -eq 0
+                    set in_quote 1
+                    set open_idx $i
+                else
+                    set in_quote 0
+                    set -a pairs "$open_idx $i"
+                end
+            end
+            set prev_char "$c"
+            set i (math $i + 1)
+        end
+
+        for p in $pairs
+            set -l parts (string split " " -- $p)
+            if test $cursor_pos -ge $parts[1] -a $cursor_pos -le $parts[2]
+                echo $parts[1]
+                echo $parts[2]
+                return 0
+            end
+        end
+        for p in $pairs
+            set -l parts (string split " " -- $p)
+            if test $parts[1] -gt $cursor_pos
+                echo $parts[1]
+                echo $parts[2]
+                return 0
+            end
+        end
+    end
+    return 1
+end
+
+function __fish_helix_find_word_bounds --argument-names type mode buf cursor_pos
+    set -l len (string length -- "$buf")
+    if test $len -eq 0
+        return 1
+    end
+    if test $cursor_pos -ge $len
+        set cursor_pos (math $len - 1)
+    end
+
+    set -l cur_char (string sub -s (math $cursor_pos + 1) -l 1 -- "$buf")
+
+    set -l class 2
+    if string match -qr "^\s" -- "$cur_char"
+        set class 0
+    else if test "$type" = "W"
+        set class 1
+    else if string match -qr "^[a-zA-Z0-9_]" -- "$cur_char"
+        set class 1
+    end
+
+    set -l start $cursor_pos
+    while test $start -gt 0
+        set -l prev_char (string sub -s $start -l 1 -- "$buf")
+        set -l prev_class 2
+        if string match -qr "^\s" -- "$prev_char"
+            set prev_class 0
+        else if test "$type" = "W"
+            set prev_class 1
+        else if string match -qr "^[a-zA-Z0-9_]" -- "$prev_char"
+            set prev_class 1
+        end
+        if test $prev_class -ne $class
+            break
+        end
+        set start (math $start - 1)
+    end
+
+    set -l end (math $cursor_pos + 1)
+    while test $end -lt $len
+        set -l next_char (string sub -s (math $end + 1) -l 1 -- "$buf")
+        set -l next_class 2
+        if string match -qr "^\s" -- "$next_char"
+            set next_class 0
+        else if test "$type" = "W"
+            set next_class 1
+        else if string match -qr "^[a-zA-Z0-9_]" -- "$next_char"
+            set next_class 1
+        end
+        if test $next_class -ne $class
+            break
+        end
+        set end (math $end + 1)
+    end
+
+    if test "$mode" = "a" -a $class -ne 0
+        while test $end -lt $len
+            set -l next_char (string sub -s (math $end + 1) -l 1 -- "$buf")
+            if not string match -qr "^\s" -- "$next_char"
+                break
+            end
+            set end (math $end + 1)
+        end
+    end
+
+    echo $start
+    echo $end
 end
 
 function __fish_helix_surround_add --argument-names char
@@ -315,6 +490,7 @@ function __fish_helix_surround_add --argument-names char
         commandline -i "$open$sel$close"
         commandline -f repaint-mode
     else
+        # If no selection, surround word under cursor
         commandline -f forward-word-end begin-selection backward-word
         set -l sel (commandline -s)
         set -l start (commandline --selection-start)
@@ -332,6 +508,149 @@ function __fish_helix_surround_add --argument-names char
         commandline -f repaint-mode
     end
     set fish_bind_mode default
+end
+
+function __fish_helix_surround_delete --argument-names char
+    set -l buf (commandline -b)
+    set -l cursor (commandline -C)
+    set -l len (string length -- "$buf")
+    if test $len -eq 0
+        return
+    end
+
+    set -l pair (__fish_helix_find_pair "$char" "$buf" "$cursor")
+    if test (count $pair) -lt 2
+        return
+    end
+
+    set -l open_idx $pair[1]
+    set -l close_idx $pair[2]
+
+    set -l prefix ""
+    if test $open_idx -gt 0
+        set prefix (string sub -s 1 -l $open_idx -- "$buf")
+    end
+    set -l middle (string sub -s (math $open_idx + 2) -l (math $close_idx - $open_idx - 1) -- "$buf")
+    set -l suffix ""
+    if test (math $close_idx + 1) -lt $len
+        set suffix (string sub -s (math $close_idx + 2) -- "$buf")
+    end
+
+    set -l new_buf "$prefix$middle$suffix"
+    set -l new_cursor $cursor
+    if test $cursor -gt $close_idx
+        set new_cursor (math $cursor - 2)
+    else if test $cursor -gt $open_idx
+        set new_cursor (math $cursor - 1)
+    end
+    set -l new_len (string length -- "$new_buf")
+    if test $new_cursor -ge $new_len
+        set new_cursor (math $new_len - 1)
+    end
+    if test $new_cursor -lt 0
+        set new_cursor 0
+    end
+
+    commandline -f end-selection
+    commandline -r -- "$new_buf"
+    commandline -C $new_cursor
+    commandline -f repaint-mode
+    set fish_bind_mode default
+end
+
+function __fish_helix_surround_save_old --argument-names char
+    set -g __fish_helix_surround_old "$char"
+end
+
+function __fish_helix_surround_replace --argument-names new_char
+    set -l old_char "$__fish_helix_surround_old"
+    set -g __fish_helix_surround_old ""
+
+    set -l buf (commandline -b)
+    set -l cursor (commandline -C)
+    set -l len (string length -- "$buf")
+    if test $len -eq 0
+        return
+    end
+
+    set -l pair (__fish_helix_find_pair "$old_char" "$buf" "$cursor")
+    if test (count $pair) -lt 2
+        return
+    end
+
+    set -l open_idx $pair[1]
+    set -l close_idx $pair[2]
+
+    set -l new_pair (__fish_helix_get_surround_pair "$new_char")
+    set -l new_open $new_pair[1]
+    set -l new_close $new_pair[2]
+
+    set -l prefix ""
+    if test $open_idx -gt 0
+        set prefix (string sub -s 1 -l $open_idx -- "$buf")
+    end
+    set -l middle (string sub -s (math $open_idx + 2) -l (math $close_idx - $open_idx - 1) -- "$buf")
+    set -l suffix ""
+    if test (math $close_idx + 1) -lt $len
+        set suffix (string sub -s (math $close_idx + 2) -- "$buf")
+    end
+
+    set -l new_buf "$prefix$new_open$middle$new_close$suffix"
+    commandline -f end-selection
+    commandline -r -- "$new_buf"
+    commandline -C $cursor
+    commandline -f repaint-mode
+    set fish_bind_mode default
+end
+
+function __fish_helix_textobject --argument-names target_mode char
+    set -l buf (commandline -b)
+    set -l cursor (commandline -C)
+    set -l len (string length -- "$buf")
+    if test $len -eq 0
+        return
+    end
+
+    set -l start -1
+    set -l end -1
+
+    if test "$char" = "w" -o "$char" = "W"
+        set -l bounds (__fish_helix_find_word_bounds "$char" "$target_mode" "$buf" "$cursor")
+        if test (count $bounds) -lt 2
+            return
+        end
+        set start $bounds[1]
+        set end $bounds[2]
+    else
+        set -l pair (__fish_helix_find_pair "$char" "$buf" "$cursor")
+        if test (count $pair) -lt 2
+            return
+        end
+        set -l open_idx $pair[1]
+        set -l close_idx $pair[2]
+
+        if test "$target_mode" = "i"
+            set start (math $open_idx + 1)
+            set end $close_idx
+        else
+            set start $open_idx
+            set end (math $close_idx + 1)
+        end
+    end
+
+    set -l diff (math "$end - $start")
+    commandline -f end-selection
+    commandline -C $start
+    if test $diff -gt 0
+        commandline -f begin-selection
+        for i in (seq $diff)
+            commandline -f forward-char
+        end
+        set fish_bind_mode visual
+    else
+        set fish_bind_mode default
+    end
+    commandline -f repaint-mode
 end
 
 
@@ -648,6 +967,10 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     # mm jumps to matching bracket
     bind --preset -M default m,m jump-to-matching-bracket
     bind --preset -M default -m helix_surround_add m,s repaint-mode
+    bind --preset -M default -m helix_surround_delete m,d repaint-mode
+    bind --preset -M default -m helix_surround_replace_old m,r repaint-mode
+    bind --preset -M default -m helix_textobject_inside m,i repaint-mode
+    bind --preset -M default -m helix_textobject_around m,a repaint-mode
 
     # --- Space Sub-Mode ( ) ---
     bind --preset -M default ' ',y fish_clipboard_copy
@@ -672,10 +995,34 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M helix_replace_one -m default escape cancel repaint-mode
     bind --preset -M helix_replace_one -m default ctrl-\[ cancel repaint-mode
 
-    # --- Surround Add Mode (ms) ---
+    # --- Match & Surround Sub-Modes ---
+    # ms<char>: Surround Add
     bind --preset -M helix_surround_add -m default '' '__fish_helix_surround_add $argv'
     bind --preset -M helix_surround_add -m default escape cancel repaint-mode
     bind --preset -M helix_surround_add -m default ctrl-\[ cancel repaint-mode
+
+    # md<char>: Surround Delete
+    bind --preset -M helix_surround_delete -m default '' '__fish_helix_surround_delete $argv'
+    bind --preset -M helix_surround_delete -m default escape cancel repaint-mode
+    bind --preset -M helix_surround_delete -m default ctrl-\[ cancel repaint-mode
+
+    # mr<old><new>: Surround Replace
+    bind --preset -M helix_surround_replace_old -m helix_surround_replace_new '' '__fish_helix_surround_save_old $argv'
+    bind --preset -M helix_surround_replace_old -m default escape cancel repaint-mode
+    bind --preset -M helix_surround_replace_old -m default ctrl-\[ cancel repaint-mode
+    bind --preset -M helix_surround_replace_new -m default '' '__fish_helix_surround_replace $argv'
+    bind --preset -M helix_surround_replace_new -m default escape cancel repaint-mode
+    bind --preset -M helix_surround_replace_new -m default ctrl-\[ cancel repaint-mode
+
+    # mi<char>: Textobject Inside
+    bind --preset -M helix_textobject_inside -m visual '' '__fish_helix_textobject i $argv'
+    bind --preset -M helix_textobject_inside -m default escape cancel repaint-mode
+    bind --preset -M helix_textobject_inside -m default ctrl-\[ cancel repaint-mode
+
+    # ma<char>: Textobject Around
+    bind --preset -M helix_textobject_around -m visual '' '__fish_helix_textobject a $argv'
+    bind --preset -M helix_textobject_around -m default escape cancel repaint-mode
+    bind --preset -M helix_textobject_around -m default ctrl-\[ cancel repaint-mode
 
     # ==========================================
     # --- Select / Extend Mode (visual) ---
@@ -748,7 +1095,12 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M visual \` 'commandline -f downcase-selection end-selection repaint-mode; set fish_bind_mode default'
     bind --preset -M visual \e\` 'commandline -f upcase-selection end-selection repaint-mode; set fish_bind_mode default'
 
+    # Match mode in visual mode
     bind --preset -M visual -m helix_surround_add m,s repaint-mode
+    bind --preset -M visual -m helix_surround_delete m,d repaint-mode
+    bind --preset -M visual -m helix_surround_replace_old m,r repaint-mode
+    bind --preset -M visual -m helix_textobject_inside m,i repaint-mode
+    bind --preset -M visual -m helix_textobject_around m,a repaint-mode
 
     bind --preset -M visual u undo
     bind --preset -M visual U redo

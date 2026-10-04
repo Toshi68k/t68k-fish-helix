@@ -393,6 +393,133 @@ assert_equal "$spoof_res_ins" "vim-insert" "Atuin search receives vim-insert mod
 # Restore original atuin setting
 set -g fish_helix_atuin $orig_atuin
 
+# 8. Verify Match Mode Extensions (Textobjects & Surround Delete/Replace)
+echo
+echo "--- Testing Match Mode Extensions (Textobjects & Surround) ---"
+
+# Key bindings in default mode
+set -l bind_md (bind -M default m,d | string trim)
+assert_contains "$bind_md" "helix_surround_delete" "md in normal mode enters surround delete"
+
+set -l bind_mr (bind -M default m,r | string trim)
+assert_contains "$bind_mr" "helix_surround_replace_old" "mr in normal mode enters surround replace"
+
+set -l bind_mi (bind -M default m,i | string trim)
+assert_contains "$bind_mi" "helix_textobject_inside" "mi in normal mode enters textobject inside"
+
+set -l bind_ma (bind -M default m,a | string trim)
+assert_contains "$bind_ma" "helix_textobject_around" "ma in normal mode enters textobject around"
+
+# Key bindings in visual mode
+set -l bind_vis_md (bind -M visual m,d | string trim)
+assert_contains "$bind_vis_md" "helix_surround_delete" "md in visual mode enters surround delete"
+
+set -l bind_vis_mr (bind -M visual m,r | string trim)
+assert_contains "$bind_vis_mr" "helix_surround_replace_old" "mr in visual mode enters surround replace"
+
+set -l bind_vis_mi (bind -M visual m,i | string trim)
+assert_contains "$bind_vis_mi" "helix_textobject_inside" "mi in visual mode enters textobject inside"
+
+set -l bind_vis_ma (bind -M visual m,a | string trim)
+assert_contains "$bind_vis_ma" "helix_textobject_around" "ma in visual mode enters textobject around"
+
+# Sub-mode transitions and actions
+set -l bind_sub_md (bind -M helix_surround_delete '' | string trim)
+assert_contains "$bind_sub_md" "__fish_helix_surround_delete" "helix_surround_delete invokes __fish_helix_surround_delete"
+
+set -l bind_sub_mr_old (bind -M helix_surround_replace_old '' | string trim)
+assert_contains "$bind_sub_mr_old" "__fish_helix_surround_save_old" "helix_surround_replace_old saves old char"
+
+set -l bind_sub_mr_new (bind -M helix_surround_replace_new '' | string trim)
+assert_contains "$bind_sub_mr_new" "__fish_helix_surround_replace" "helix_surround_replace_new invokes replace"
+
+set -l bind_sub_mi (bind -M helix_textobject_inside '' | string trim)
+assert_contains "$bind_sub_mi" "__fish_helix_textobject i" "helix_textobject_inside invokes __fish_helix_textobject i"
+
+set -l bind_sub_ma (bind -M helix_textobject_around '' | string trim)
+assert_contains "$bind_sub_ma" "__fish_helix_textobject a" "helix_textobject_around invokes __fish_helix_textobject a"
+
+# Helper: __fish_helix_get_surround_pair with aliases (b, r, B)
+set -l pair_b (__fish_helix_get_surround_pair 'b')
+assert_equal "$pair_b[1]" "(" "b resolves to ("
+assert_equal "$pair_b[2]" ")" "b resolves to )"
+
+set -l pair_r (__fish_helix_get_surround_pair 'r')
+assert_equal "$pair_r[1]" "[" "r resolves to ["
+assert_equal "$pair_r[2]" "]" "r resolves to ]"
+
+set -l pair_B (__fish_helix_get_surround_pair 'B')
+assert_equal "$pair_B[1]" "{" "B resolves to {"
+assert_equal "$pair_B[2]" "}" "B resolves to }"
+
+# Helper: __fish_helix_find_pair
+set -l quote_pair (__fish_helix_find_pair '"' 'git commit -m "initial commit"' 18)
+assert_equal "$quote_pair[1]" "14" "find_pair double quote open index"
+assert_equal "$quote_pair[2]" "29" "find_pair double quote close index"
+
+set -l paren_nested (__fish_helix_find_pair '(' 'echo (math (expr 1 + 2))' 18)
+assert_equal "$paren_nested[1]" "11" "find_pair nested paren inner open index"
+assert_equal "$paren_nested[2]" "22" "find_pair nested paren inner close index"
+
+# Helper: __fish_helix_find_word_bounds
+set -l word_bounds_in (__fish_helix_find_word_bounds 'w' 'i' 'git commit -m "initial"' 6)
+assert_equal "$word_bounds_in[1]" "4" "find_word_bounds commit start"
+assert_equal "$word_bounds_in[2]" "10" "find_word_bounds commit end"
+
+set -l word_bounds_ar (__fish_helix_find_word_bounds 'w' 'a' 'git commit -m "initial"' 6)
+assert_equal "$word_bounds_ar[1]" "4" "find_word_bounds commit around start"
+assert_equal "$word_bounds_ar[2]" "11" "find_word_bounds commit around end (with space)"
+
+# Interactive execution tests: Surround Delete
+set -l test_del_res (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'git commit -m \"initial commit\"'
+    commandline -C 18
+    __fish_helix_surround_delete '\"'
+    commandline -b
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_del_res" 'git commit -m initial commit' "Surround delete removes double quotes"
+
+set -l test_del_paren (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'echo (pwd)'
+    commandline -C 7
+    __fish_helix_surround_delete '('
+    commandline -b
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_del_paren" 'echo pwd' "Surround delete removes parentheses"
+
+# Interactive execution tests: Surround Replace
+set -l test_rep_res (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'echo \"hello world\"'
+    commandline -C 7
+    set -g __fish_helix_surround_old '\"'
+    __fish_helix_surround_replace \"'\"
+    commandline -b
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_rep_res" "echo 'hello world'" "Surround replace converts double quotes to single quotes"
+
+set -l test_rep_paren (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'echo (pwd)'
+    commandline -C 7
+    set -g __fish_helix_surround_old 'b'
+    __fish_helix_surround_replace 'r'
+    commandline -b
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_rep_paren" 'echo [pwd]' "Surround replace converts parens (b) to square brackets (r)"
+
+# Interactive execution tests: Textobject selection
+set -l test_to_mode (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'echo \"hello world\"'
+    commandline -C 7
+    __fish_helix_textobject i '\"'
+    echo \$fish_bind_mode
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_to_mode" "visual" "Textobject selection sets visual mode"
+
 echo
 echo "================================================="
 echo "Results: $passed Passed, $failed Failed"
