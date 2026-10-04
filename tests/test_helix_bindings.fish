@@ -153,6 +153,42 @@ assert_contains "$bind_I" "beginning-of-line" "I inserts at beginning of line"
 
 set -l bind_A (bind -M default A | string trim)
 assert_contains "$bind_A" "end-of-line" "A inserts at end of line"
+assert_contains "$bind_A" "-m insert" "A transitions mode to insert"
+assert_contains "$bind_A" "exclusive" "A sets fish_cursor_end_mode exclusive so it appends after last character"
+
+set -l bind_a_check (bind -M default a | string trim)
+assert_contains "$bind_a_check" "-m insert" "a transitions mode to insert"
+assert_contains "$bind_a_check" "exclusive" "a sets fish_cursor_end_mode exclusive so it can advance past last character"
+
+set -l bind_o (bind -M default o | string trim)
+assert_contains "$bind_o" "insert-line-under" "o opens line below"
+assert_contains "$bind_o" "exclusive" "o sets fish_cursor_end_mode exclusive"
+
+set -l bind_O (bind -M default O | string trim)
+assert_contains "$bind_O" "insert-line-over" "O opens line above"
+assert_contains "$bind_O" "exclusive" "O sets fish_cursor_end_mode exclusive"
+
+# Visual (Select) mode insert transitions
+set -l bind_vis_A (bind -M visual A | string trim)
+assert_contains "$bind_vis_A" "end-of-line" "Visual A moves to end of line"
+assert_contains "$bind_vis_A" "-m insert" "Visual A enters insert mode"
+assert_contains "$bind_vis_A" "exclusive" "Visual A sets cursor end mode exclusive"
+assert_contains "$bind_vis_A" "end-selection" "Visual A collapses selection"
+
+set -l bind_vis_I (bind -M visual I | string trim)
+assert_contains "$bind_vis_I" "beginning-of-line" "Visual I moves to beginning of line"
+assert_contains "$bind_vis_I" "-m insert" "Visual I enters insert mode"
+assert_contains "$bind_vis_I" "end-selection" "Visual I collapses selection"
+
+set -l bind_vis_i (bind -M visual i | string trim)
+assert_contains "$bind_vis_i" "-m insert" "Visual i enters insert mode"
+assert_contains "$bind_vis_i" "end-selection" "Visual i collapses selection"
+
+set -l bind_vis_a (bind -M visual a | string trim)
+assert_contains "$bind_vis_a" "forward-char" "Visual a advances after selection"
+assert_contains "$bind_vis_a" "-m insert" "Visual a enters insert mode"
+assert_contains "$bind_vis_a" "exclusive" "Visual a sets cursor end mode exclusive"
+assert_contains "$bind_vis_a" "end-selection" "Visual a collapses selection"
 
 # Insert mode deletion keys
 set -l bind_bs (bind -M insert backspace | string trim)
