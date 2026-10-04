@@ -1381,6 +1381,41 @@ set -l test_rep_multi (fish -i --no-config -c "
 " 2>&1 | tail -n 1 | string trim)
 assert_equal "$test_rep_multi" "--- bar" "r replaces every character of active selection ('foo' -> '---')"
 
+# 12. Verify Discovery, Navigation & Housekeeping (Phase 4)
+echo
+echo "--- Testing Discovery & Navigation (Phase 4) ---"
+
+# gm (jump to matching bracket alias) bindings
+set -l bind_gm_def (bind -M default g,m | string trim)
+assert_contains "$bind_gm_def" "jump-to-matching-bracket" "gm in default mode jumps to matching bracket"
+
+set -l bind_gm_vis (bind -M visual g,m | string trim)
+assert_contains "$bind_gm_vis" "jump-to-matching-bracket" "gm in visual mode jumps to matching bracket"
+
+# <space>? and <space>h cheatsheet bindings
+set -l bind_sp_q_def (bind -M default ' ',? | string trim)
+assert_contains "$bind_sp_q_def" "__fish_helix_cheatsheet" "<space>? in default mode opens cheatsheet"
+
+set -l bind_sp_h_def (bind -M default ' ',h | string trim)
+assert_contains "$bind_sp_h_def" "__fish_helix_cheatsheet" "<space>h in default mode opens cheatsheet"
+
+set -l bind_sp_q_vis (bind -M visual ' ',? | string trim)
+assert_contains "$bind_sp_q_vis" "__fish_helix_cheatsheet" "<space>? in visual mode opens cheatsheet"
+
+set -l bind_sp_h_vis (bind -M visual ' ',h | string trim)
+assert_contains "$bind_sp_h_vis" "__fish_helix_cheatsheet" "<space>h in visual mode opens cheatsheet"
+
+# Interactive execution: __fish_helix_cheatsheet output
+set -l test_cs_raw (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    __fish_helix_cheatsheet
+" 2>&1)
+assert_contains "$test_cs_raw" "Helix Keybindings Cheatsheet" "Cheatsheet contains header title"
+assert_contains "$test_cs_raw" "MOTIONS / SELECTIONS" "Cheatsheet contains motions section"
+assert_contains "$test_cs_raw" "MATCH & SURROUND" "Cheatsheet contains match and surround section"
+assert_contains "$test_cs_raw" "EDITING & CLIPBOARD" "Cheatsheet contains editing and clipboard section"
+
+
 echo
 echo "================================================="
 echo "Results: $passed Passed, $failed Failed"

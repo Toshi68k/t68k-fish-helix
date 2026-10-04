@@ -627,7 +627,7 @@ function __fish_helix_replace_with_clipboard --description 'Helix: replace selec
         return
     end
 
-    set -l buf (commandline -b)
+    set -l buf (string join \n -- (commandline -b))
     set -l pos (commandline -C)
     set -l len 1
 
@@ -646,9 +646,9 @@ function __fish_helix_replace_with_clipboard --description 'Helix: replace selec
 
     set -l prefix ""
     if test $pos -gt 0
-        set prefix (string sub -s 1 -l $pos -- "$buf")
+        set prefix (string sub -s 1 -l $pos -- "$buf" | string collect)
     end
-    set -l suffix (string sub -s (math $pos + $len + 1) -- "$buf")
+    set -l suffix (string sub -s (math $pos + $len + 1) -- "$buf" | string collect)
 
     set -l new_buf "$prefix$clip$suffix"
     commandline -r -- "$new_buf"
@@ -1271,11 +1271,11 @@ function __fish_helix_execute_replace --argument-names char --description 'Helix
 
     set -l prefix ""
     if test $r_start -gt 0
-        set prefix (string sub -s 1 -l $r_start -- "$buf")
+        set prefix (string sub -s 1 -l $r_start -- "$buf" | string collect)
     end
     set -l suffix ""
     if test (math $r_start + $r_len) -lt $len
-        set suffix (string sub -s (math $r_start + $r_len + 1) -- "$buf")
+        set suffix (string sub -s (math $r_start + $r_len + 1) -- "$buf" | string collect)
     end
 
     set -l new_buf "$prefix$rep_str$suffix"
@@ -1284,6 +1284,95 @@ function __fish_helix_execute_replace --argument-names char --description 'Helix
     commandline -C $r_start
     set fish_bind_mode default
     commandline -f repaint-mode
+end
+
+function __fish_helix_cheatsheet --description 'Helix: show keybindings cheatsheet (<space>? / <space>h)'
+    set -l pager cat
+    if test -t 1; and command -v less >/dev/null 2>&1
+        set pager less -FRX
+    else if command -v more >/dev/null 2>&1; and test -t 1
+        set pager more
+    end
+
+    set -l c_title (set_color --bold cyan)
+    set -l c_sec (set_color --bold yellow)
+    set -l c_key (set_color --bold green)
+    set -l c_desc (set_color normal)
+    set -l c_dim (set_color brblack)
+    set -l c_reset (set_color normal)
+
+    set -l text "
+$c_title Helix Keybindings Cheatsheet for Fish Shell$c_reset
+$c_dim================================================================================$c_reset
+
+$c_sec MODES$c_reset
+  $c_key i$c_desc            Insert before selection / cursor$c_reset
+  $c_key a$c_desc            Insert after cursor (append)$c_reset
+  $c_key I$c_desc            Insert at first non-whitespace character on line$c_reset
+  $c_key A$c_desc            Insert at end of line$c_reset
+  $c_key c$c_desc            Change selection (delete selection and enter insert mode)$c_reset
+  $c_key v, Esc$c_desc       Toggle between Normal and Visual (Select) mode$c_reset
+  $c_key r<char>$c_desc      Replace character under cursor or entire selection$c_reset
+
+$c_sec MOTIONS / SELECTIONS$c_reset
+  $c_key h, j, k, l$c_desc   Move left, down, up, right$c_reset
+  $c_key w / W$c_desc        Select next word / BIGWORD end$c_reset
+  $c_key b / B$c_desc        Select previous word / BIGWORD start$c_reset
+  $c_key e / E$c_desc        Select to next word / BIGWORD end$c_reset
+  $c_key x$c_desc            Select current line (expand selection line by line)$c_reset
+  $c_key X$c_desc            Extend selection to whole line$c_reset
+  $c_key %$c_desc            Select entire buffer$c_reset
+  $c_key ;$c_desc            Collapse selection to single cursor$c_reset
+  $c_key Alt-; (\e;)$c_desc  Swap selection anchor and cursor$c_reset
+  $c_key Alt+: (\e:)$c_desc  Ensure selection direction is forward$c_reset
+  $c_key _$c_desc            Trim leading and trailing whitespace from selection$c_reset
+  $c_key J$c_desc            Join lines with space (collapsing indentation)$c_reset
+  $c_key Alt+J (\eJ)$c_desc  Join lines without space$c_reset
+
+$c_sec GOTO (g)$c_reset
+  $c_key gh$c_desc           Go to start of line$c_reset
+  $c_key gl$c_desc           Go to end of line$c_reset
+  $c_key gs$c_desc           Go to first non-whitespace character on line$c_reset
+  $c_key gg / gt$c_desc      Go to start of buffer$c_reset
+  $c_key ge / gb$c_desc      Go to end of buffer$c_reset
+  $c_key gm$c_desc           Jump to matching bracket (alias for mm)$c_reset
+  $c_key gp$c_desc           Paste from kill-ring (yank-pop)$c_reset
+
+$c_sec MATCH & SURROUND (m)$c_reset
+  $c_key mm$c_desc           Jump to matching bracket$c_reset
+  $c_key mi<delim>$c_desc    Select inside delimiter (\", ', `, (), [], {}, <>, w, W)$c_reset
+  $c_key ma<delim>$c_desc    Select around delimiter (including quotes/brackets)$c_reset
+  $c_key md<delim>$c_desc    Delete surround delimiter$c_reset
+  $c_key ms<delim>$c_desc    Add surround delimiter around selection$c_reset
+  $c_key mr<old><new>$c_desc Replace surround delimiter <old> with <new>$c_reset
+
+$c_sec EDITING & CLIPBOARD$c_reset
+  $c_key d, Alt+d$c_desc     Delete selection (d yanks, Alt+d does not yank)$c_reset
+  $c_key c, Alt+c$c_desc     Change selection (c yanks, Alt+c does not yank)$c_reset
+  $c_key y$c_desc            Yank (copy) selection to Helix register$c_reset
+  $c_key p, P$c_desc         Paste after / before cursor from Helix register$c_reset
+  $c_key ~$c_desc            Toggle case of selection$c_reset
+  $c_key `$c_desc            Lowercase selection$c_reset
+  $c_key Alt+`$c_desc        Uppercase selection$c_reset
+  $c_key u, U$c_desc         Undo / Redo$c_reset
+  $c_key <space>y$c_desc     Copy selection to system clipboard$c_reset
+  $c_key <space>p / P$c_desc Paste from system clipboard after / before cursor$c_reset
+  $c_key <space>R$c_desc     Replace selection with system clipboard contents$c_reset
+  $c_key <space>e$c_desc     Open external editor (\$EDITOR)$c_reset
+  $c_key Ctrl-x Ctrl-e$c_desc Open external editor (\$EDITOR)$c_reset
+  $c_key <space>c, #$c_desc  Toggle line comment$c_reset
+  $c_key <space>? / h$c_desc Show this cheatsheet$c_reset
+
+$c_sec SEARCH & HISTORY$c_reset
+  $c_key / , ?$c_desc        Search history backward / forward (Atuin integrated)$c_reset
+  $c_key Ctrl-r$c_desc       Search history backward$c_reset
+  $c_key <space>b$c_desc     Search history$c_reset
+  $c_key n, N$c_desc         Jump to next / previous history search match$c_reset
+$c_dim================================================================================$c_reset
+"
+
+    printf '%s\n' "$text" | $pager
+    commandline -f repaint
 end
 
 
@@ -1602,6 +1691,7 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M default g,t beginning-of-buffer
     bind --preset -M default g,b end-of-buffer
     bind --preset -M default g,p yank-pop
+    bind --preset -M default g,m jump-to-matching-bracket
 
     # --- Match Sub-Mode (m) ---
     # mm jumps to matching bracket
@@ -1616,6 +1706,8 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M default ' ',f complete-and-search
     bind --preset -M default ' ',b __fish_helix_history_search
     bind --preset -M default ' ',c __fish_toggle_comment_commandline
+    bind --preset -M default ' ',\? __fish_helix_cheatsheet
+    bind --preset -M default ' ',h __fish_helix_cheatsheet
 
     # External editor readline compatibility
     bind --preset -M default ctrl-x,ctrl-e edit_command_buffer
@@ -1723,6 +1815,7 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M visual g,s __fish_helix_goto_first_nonwhitespace
     bind --preset -M visual g,g beginning-of-buffer
     bind --preset -M visual g,e end-of-buffer
+    bind --preset -M visual g,m jump-to-matching-bracket
     bind --preset -M visual m,m jump-to-matching-bracket
 
     # Selection manipulation in visual mode
@@ -1772,6 +1865,8 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M visual ' ',R __fish_helix_replace_with_clipboard
     bind --preset -M visual ' ',e edit_command_buffer
     bind --preset -M visual ctrl-x,ctrl-e edit_command_buffer
+    bind --preset -M visual ' ',\? __fish_helix_cheatsheet
+    bind --preset -M visual ' ',h __fish_helix_cheatsheet
     bind --preset -M visual \# __fish_toggle_comment_commandline
 
     # Setup cursor shape
