@@ -11,7 +11,7 @@ function __fish_helix_prepare_replace --description 'Helix: prepare replace char
         set -g __fish_helix_replace_start (commandline -C)
         set -g __fish_helix_replace_len 1
     end
-    set fish_bind_mode helix_replace_one
+    set fish_bind_mode replace_one
     commandline -f repaint-mode
 end
 

@@ -11,8 +11,13 @@ function fish_helix_cursor --description 'Set cursor shape for different Helix m
     set -q fish_cursor_visual
     or set -g fish_cursor_visual underscore
 
+    set -q fish_cursor_replace_one
+    or set -q fish_cursor_helix_replace_one
+    and set -g fish_cursor_replace_one $fish_cursor_helix_replace_one
+    or set -g fish_cursor_replace_one underscore
+
     set -q fish_cursor_helix_replace_one
-    or set -g fish_cursor_helix_replace_one underscore
+    or set -g fish_cursor_helix_replace_one $fish_cursor_replace_one
 
     function __fish_helix_cursor --argument-names varname
         if not status is-interactive; and not status is-interactive-read
@@ -22,7 +27,7 @@ function fish_helix_cursor --description 'Set cursor shape for different Helix m
             switch $varname
                 case fish_cursor_insert
                     __fish_cursor_xterm line
-                case fish_cursor_visual fish_cursor_helix_replace_one
+                case fish_cursor_visual fish_cursor_replace_one fish_cursor_helix_replace_one
                     __fish_cursor_xterm underscore
                 case '*'
                     __fish_cursor_xterm $fish_cursor_unknown

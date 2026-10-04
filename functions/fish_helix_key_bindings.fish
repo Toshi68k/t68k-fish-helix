@@ -1244,7 +1244,7 @@ function __fish_helix_prepare_replace --description 'Helix: prepare replace char
         set -g __fish_helix_replace_start (commandline -C)
         set -g __fish_helix_replace_len 1
     end
-    set fish_bind_mode helix_replace_one
+    set fish_bind_mode replace_one
     commandline -f repaint-mode
 end
 
@@ -1390,8 +1390,13 @@ if not functions -q fish_helix_cursor
         set -q fish_cursor_visual
         or set -g fish_cursor_visual underscore
 
+        set -q fish_cursor_replace_one
+        or set -q fish_cursor_helix_replace_one
+        and set -g fish_cursor_replace_one $fish_cursor_helix_replace_one
+        or set -g fish_cursor_replace_one underscore
+
         set -q fish_cursor_helix_replace_one
-        or set -g fish_cursor_helix_replace_one underscore
+        or set -g fish_cursor_helix_replace_one $fish_cursor_replace_one
 
         function __fish_helix_cursor --argument-names varname
             if not status is-interactive; and not status is-interactive-read
@@ -1401,7 +1406,7 @@ if not functions -q fish_helix_cursor
                 switch $varname
                     case fish_cursor_insert
                         __fish_cursor_xterm line
-                    case fish_cursor_visual fish_cursor_helix_replace_one
+                    case fish_cursor_visual fish_cursor_replace_one fish_cursor_helix_replace_one
                         __fish_cursor_xterm underscore
                     case '*'
                         __fish_cursor_xterm $fish_cursor_unknown
@@ -1731,12 +1736,17 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     end
     for c in $replace_chars
         set -l esc_c (string escape -- "$c")
+        bind --preset -M replace_one -m default -- $c "__fish_helix_execute_replace $esc_c"
         bind --preset -M helix_replace_one -m default -- $c "__fish_helix_execute_replace $esc_c"
     end
+    bind --preset -M replace_one -m default enter "__fish_helix_execute_replace '\n'"
     bind --preset -M helix_replace_one -m default enter "__fish_helix_execute_replace '\n'"
-    bind --preset -M helix_replace_one -m default escape 'set -e __fish_helix_replace_start; set -e __fish_helix_replace_len; commandline -f repaint-mode'
-    bind --preset -M helix_replace_one -m default ctrl-\[ 'set -e __fish_helix_replace_start; set -e __fish_helix_replace_len; commandline -f repaint-mode'
-    bind --preset -M helix_replace_one -m default '' 'set -e __fish_helix_replace_start; set -e __fish_helix_replace_len; commandline -f repaint-mode'
+    bind --preset -M replace_one -m default escape 'set -e __fish_helix_replace_start; set -e __fish_helix_replace_len; set fish_bind_mode default; commandline -f repaint-mode'
+    bind --preset -M helix_replace_one -m default escape 'set -e __fish_helix_replace_start; set -e __fish_helix_replace_len; set fish_bind_mode default; commandline -f repaint-mode'
+    bind --preset -M replace_one -m default ctrl-\[ 'set -e __fish_helix_replace_start; set -e __fish_helix_replace_len; set fish_bind_mode default; commandline -f repaint-mode'
+    bind --preset -M helix_replace_one -m default ctrl-\[ 'set -e __fish_helix_replace_start; set -e __fish_helix_replace_len; set fish_bind_mode default; commandline -f repaint-mode'
+    bind --preset -M replace_one -m default '' 'set -e __fish_helix_replace_start; set -e __fish_helix_replace_len; set fish_bind_mode default; commandline -f repaint-mode'
+    bind --preset -M helix_replace_one -m default '' 'set -e __fish_helix_replace_start; set -e __fish_helix_replace_len; set fish_bind_mode default; commandline -f repaint-mode'
 
     # --- Match & Surround Sequences (Direct bindings for instant execution) ---
     # mm: Match Brackets
@@ -1875,7 +1885,7 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
 
     function __fish_helix_key_bindings_on_mode_change --on-variable fish_bind_mode
         switch $fish_bind_mode
-            case insert helix_replace_one
+            case insert replace_one helix_replace_one
                 set -g fish_cursor_end_mode exclusive
             case '*'
                 set -g fish_cursor_end_mode inclusive

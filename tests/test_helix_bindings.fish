@@ -296,9 +296,13 @@ set -g fish_bind_mode visual
 set -l prompt_sel (fish_helix_mode_prompt | string trim)
 assert_contains "$prompt_sel" "[SEL]" "Select mode displays [SEL]"
 
-set -g fish_bind_mode helix_replace_one
+set -g fish_bind_mode replace_one
 set -l prompt_rep (fish_helix_mode_prompt | string trim)
-assert_contains "$prompt_rep" "[REP]" "Replace mode displays [REP]"
+assert_contains "$prompt_rep" "[REP]" "Replace mode (replace_one) displays [REP]"
+
+set -g fish_bind_mode helix_replace_one
+set -l prompt_rep_legacy (fish_helix_mode_prompt | string trim)
+assert_contains "$prompt_rep_legacy" "[REP]" "Replace mode legacy (helix_replace_one) displays [REP]"
 
 # Test disabling prompt output (e.g. for Tide / Starship)
 set -g fish_helix_show_mode_prompt false
@@ -1221,6 +1225,21 @@ assert_contains "$bind_rep_def" "__fish_helix_prepare_replace" "r in default mod
 
 set -l bind_rep_vis (bind -M visual r | string trim)
 assert_contains "$bind_rep_vis" "__fish_helix_prepare_replace" "r in visual mode prepares character replace"
+
+set -l bind_rep_mode_a (bind -M replace_one a | string trim)
+assert_contains "$bind_rep_mode_a" "__fish_helix_execute_replace" "a in replace_one mode executes replace"
+
+set -l bind_rep_compat_a (bind -M helix_replace_one a | string trim)
+assert_contains "$bind_rep_compat_a" "__fish_helix_execute_replace" "a in helix_replace_one mode executes replace"
+
+set -l test_prep_mode (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'cat'
+    commandline -C 1
+    __fish_helix_prepare_replace
+    echo \$fish_bind_mode
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_prep_mode" "replace_one" "__fish_helix_prepare_replace sets fish_bind_mode to replace_one"
 
 # 2. Interactive execution: _ (Trim selection)
 set -l test_trim_raw (fish -i --no-config -c "
