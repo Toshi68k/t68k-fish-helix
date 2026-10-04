@@ -130,8 +130,7 @@ function __fish_helix_surround_add --argument-names char
         set -l start (commandline --selection-start)
         set -l end (commandline --selection-end)
         set -l min_pos (math "min($start, $end)")
-        set -l max_pos (math "max($start, $end)")
-        set -l len (math "$max_pos - $min_pos")
+        set -l len (string length -- "$sel")
 
         commandline -f end-selection
         commandline -C $min_pos
@@ -147,8 +146,7 @@ function __fish_helix_surround_add --argument-names char
         set -l start (commandline --selection-start)
         set -l end (commandline --selection-end)
         set -l min_pos (math "min($start, $end)")
-        set -l max_pos (math "max($start, $end)")
-        set -l len (math "$max_pos - $min_pos")
+        set -l len (string length -- "$sel")
 
         commandline -f end-selection
         commandline -C $min_pos

@@ -9,15 +9,14 @@ function __fish_helix_replace_with_clipboard --description 'Helix: replace selec
     set -l len 1
 
     if commandline --selection-start >/dev/null 2>&1
+        set -l sel (commandline -s)
         set -l start (commandline --selection-start)
         set -l end (commandline --selection-end)
-        set -l min_pos (math "min($start, $end)")
-        set -l max_pos (math "max($start, $end)")
-        set len (math "$max_pos - $min_pos")
+        set pos (math "min($start, $end)")
+        set len (string length -- "$sel")
         if test $len -eq 0
             set len 1
         end
-        set pos $min_pos
         commandline -f end-selection
     end
 

@@ -29,21 +29,232 @@ function __fish_helix_run_count --description 'Run a motion or command N times b
     end
 end
 
+# Helper: categorize character into word class
+# class 0: whitespace (\s)
+# class 1: word character ([a-zA-Z0-9_] for w/b/e; all non-whitespace for W/B/E)
+# class 2: punctuation / symbol character (everything else, e.g. ", =, -, (, etc.)
+function __fish_helix_char_class --argument-names type ch
+    if string match -qr '^\s' -- "$ch"
+        echo 0
+        return
+    end
+    if test "$type" = "w" -o "$type" = "b" -o "$type" = "e"
+        if string match -qr '^[a-zA-Z0-9_]' -- "$ch"
+            echo 1
+        else
+            echo 2
+        end
+    else
+        echo 1
+    end
+end
+
+# Helper: find end index of next word/BIGWORD (inclusive index)
+function __fish_helix_find_next_word_end --argument-names type buf cursor_pos
+    set -l len (string length -- "$buf")
+    if test $len -eq 0
+        echo $cursor_pos
+        return
+    end
+    if test $cursor_pos -ge $len
+        echo (math $len - 1)
+        return
+    end
+
+    set -l pos $cursor_pos
+
+    # If on whitespace, advance past whitespace first
+    while test $pos -lt $len
+        set -l ch (string sub -s (math $pos + 1) -l 1 -- "$buf")
+        if not string match -qr '^\s' -- "$ch"
+            break
+        end
+        set pos (math $pos + 1)
+    end
+    if test $pos -ge $len
+        echo (math $len - 1)
+        return
+    end
+
+    set -l word_start $pos
+    set -l cur_char (string sub -s (math $pos + 1) -l 1 -- "$buf")
+    set -l class (__fish_helix_char_class "$type" "$cur_char")
+
+    # Advance past characters of the same word class
+    while test $pos -lt $len
+        set -l ch (string sub -s (math $pos + 1) -l 1 -- "$buf")
+        set -l ch_class (__fish_helix_char_class "$type" "$ch")
+        if test $ch_class -ne $class
+            break
+        end
+        set pos (math $pos + 1)
+    end
+
+    # Advance past trailing whitespace
+    while test $pos -lt $len
+        set -l ch (string sub -s (math $pos + 1) -l 1 -- "$buf")
+        if not string match -qr '^\s' -- "$ch"
+            break
+        end
+        set pos (math $pos + 1)
+    end
+
+    if test $pos -gt $word_start
+        echo (math $pos - 1)
+    else
+        echo $word_start
+    end
+end
+
+# Helper: find start index of previous word/BIGWORD
+function __fish_helix_find_prev_word_start --argument-names type buf pos
+    set -l len (string length -- "$buf")
+    if test $len -eq 0 -o $pos -le 0
+        echo 0
+        return
+    end
+
+    set -l cur $pos
+    if test $cur -ge $len
+        set cur (math $len - 1)
+    end
+
+    # Step 1: If on whitespace, skip all whitespace backwards
+    while test $cur -gt 0
+        set -l ch (string sub -s (math $cur + 1) -l 1 -- "$buf")
+        if not string match -qr '^\s' -- "$ch"
+            break
+        end
+        set cur (math $cur - 1)
+    end
+
+    set -l ch (string sub -s (math $cur + 1) -l 1 -- "$buf")
+    set -l class (__fish_helix_char_class "$type" "$ch")
+
+    # Step 2: Skip characters of the same word class backwards
+    while test $cur -gt 0
+        set -l prev_ch (string sub -s $cur -l 1 -- "$buf")
+        set -l prev_class (__fish_helix_char_class "$type" "$prev_ch")
+        if test $prev_class -ne $class
+            break
+        end
+        set cur (math $cur - 1)
+    end
+
+    echo $cur
+end
+
 # Helix Normal mode movements (Selection-First):
 function __fish_helix_normal_w --description 'Helix normal mode: select next word start (w)'
     set -l count (__fish_helix_consume_count)
-    commandline -f end-selection begin-selection
+    set -l buf (commandline -b)
+    set -l cursor (commandline -C)
+    set -l len (string length -- "$buf")
+    if test $len -eq 0 -o $cursor -ge $len
+        return
+    end
+
+    set -l start $cursor
+    if commandline --selection-start >/dev/null 2>&1
+        set -l sel_start (commandline --selection-start)
+        set -l sel_end (commandline --selection-end)
+        set -l max_sel (math "max($sel_start, $sel_end)")
+        if test "$fish_cursor_selection_mode" = exclusive
+            set start (math $max_sel + 1)
+        else
+            set start $max_sel
+        end
+    else
+        set -l cur_char (string sub -s (math $cursor + 1) -l 1 -- "$buf")
+        set -l next_char (string sub -s (math $cursor + 2) -l 1 -- "$buf")
+        set -l cur_class (__fish_helix_char_class "w" "$cur_char")
+        set -l next_class (__fish_helix_char_class "w" "$next_char")
+        if test $cur_class -ne $next_class
+            set start (math $cursor + 1)
+        end
+    end
+
+    while test $start -lt $len
+        set -l ch (string sub -s (math $start + 1) -l 1 -- "$buf")
+        if not string match -qr '^\s' -- "$ch"
+            break
+        end
+        set start (math $start + 1)
+    end
+    if test $start -ge $len
+        return
+    end
+
+    set -l target_end $start
     for i in (seq $count)
-        commandline -f forward-word-vi
+        if test $i -gt 1
+            set target_end (math $target_end + 1)
+            while test $target_end -lt $len
+                set -l ch (string sub -s (math $target_end + 1) -l 1 -- "$buf")
+                if not string match -qr '^\s' -- "$ch"
+                    break
+                end
+                set target_end (math $target_end + 1)
+            end
+            set start $target_end
+        end
+        set target_end (__fish_helix_find_next_word_end "w" "$buf" $target_end)
+    end
+
+    set -l diff (math "$target_end - $start")
+
+    commandline -f end-selection
+    commandline -C $start
+    commandline -f begin-selection
+    for i in (seq $diff)
+        commandline -f forward-char
     end
     commandline -f repaint-mode
 end
 
 function __fish_helix_normal_b --description 'Helix normal mode: select prev word start (b)'
     set -l count (__fish_helix_consume_count)
-    commandline -f end-selection begin-selection
+    set -l buf (commandline -b)
+    set -l cursor (commandline -C)
+    set -l len (string length -- "$buf")
+    if test $len -eq 0 -o $cursor -le 0
+        return
+    end
+
+    set -l anchor $cursor
+    if commandline --selection-start >/dev/null 2>&1
+        set -l sel_start (commandline --selection-start)
+        set -l sel_end (commandline --selection-end)
+        set -l min_sel (math "min($sel_start, $sel_end)")
+        set anchor (math $min_sel - 1)
+    else
+        set -l cur_char (string sub -s (math $cursor + 1) -l 1 -- "$buf")
+        set -l prev_char (string sub -s $cursor -l 1 -- "$buf")
+        set -l cur_class (__fish_helix_char_class "w" "$cur_char")
+        set -l prev_class (__fish_helix_char_class "w" "$prev_char")
+        if test $cur_class -ne $prev_class
+            set anchor (math $cursor - 1)
+        end
+    end
+
+    if test $anchor -lt 0
+        return
+    end
+
+    set -l target_pos $anchor
     for i in (seq $count)
-        commandline -f backward-word
+        set target_pos (__fish_helix_find_prev_word_start "w" "$buf" $target_pos)
+        if test $target_pos -gt 0 -a $i -lt $count
+            set target_pos (math $target_pos - 1)
+        end
+    end
+
+    set -l diff (math "$anchor - $target_pos")
+    commandline -f end-selection
+    commandline -C $anchor
+    commandline -f begin-selection
+    for i in (seq $diff)
+        commandline -f backward-char
     end
     commandline -f repaint-mode
 end
@@ -59,18 +270,114 @@ end
 
 function __fish_helix_normal_W --description 'Helix normal mode: select next WORD start (W)'
     set -l count (__fish_helix_consume_count)
-    commandline -f end-selection begin-selection
+    set -l buf (commandline -b)
+    set -l cursor (commandline -C)
+    set -l len (string length -- "$buf")
+    if test $len -eq 0 -o $cursor -ge $len
+        return
+    end
+
+    set -l start $cursor
+    if commandline --selection-start >/dev/null 2>&1
+        set -l sel_start (commandline --selection-start)
+        set -l sel_end (commandline --selection-end)
+        set -l max_sel (math "max($sel_start, $sel_end)")
+        if test "$fish_cursor_selection_mode" = exclusive
+            set start (math $max_sel + 1)
+        else
+            set start $max_sel
+        end
+    else
+        set -l cur_char (string sub -s (math $cursor + 1) -l 1 -- "$buf")
+        set -l next_char (string sub -s (math $cursor + 2) -l 1 -- "$buf")
+        set -l cur_class (__fish_helix_char_class "W" "$cur_char")
+        set -l next_class (__fish_helix_char_class "W" "$next_char")
+        if test $cur_class -ne $next_class
+            set start (math $cursor + 1)
+        end
+    end
+
+    while test $start -lt $len
+        set -l ch (string sub -s (math $start + 1) -l 1 -- "$buf")
+        if not string match -qr '^\s' -- "$ch"
+            break
+        end
+        set start (math $start + 1)
+    end
+    if test $start -ge $len
+        return
+    end
+
+    set -l target_end $start
     for i in (seq $count)
-        commandline -f forward-bigword-vi
+        if test $i -gt 1
+            set target_end (math $target_end + 1)
+            while test $target_end -lt $len
+                set -l ch (string sub -s (math $target_end + 1) -l 1 -- "$buf")
+                if not string match -qr '^\s' -- "$ch"
+                    break
+                end
+                set target_end (math $target_end + 1)
+            end
+            set start $target_end
+        end
+        set target_end (__fish_helix_find_next_word_end "W" "$buf" $target_end)
+    end
+
+    set -l diff (math "$target_end - $start")
+
+    commandline -f end-selection
+    commandline -C $start
+    commandline -f begin-selection
+    for i in (seq $diff)
+        commandline -f forward-char
     end
     commandline -f repaint-mode
 end
 
 function __fish_helix_normal_B --description 'Helix normal mode: select prev WORD start (B)'
     set -l count (__fish_helix_consume_count)
-    commandline -f end-selection begin-selection
+    set -l buf (commandline -b)
+    set -l cursor (commandline -C)
+    set -l len (string length -- "$buf")
+    if test $len -eq 0 -o $cursor -le 0
+        return
+    end
+
+    set -l anchor $cursor
+    if commandline --selection-start >/dev/null 2>&1
+        set -l sel_start (commandline --selection-start)
+        set -l sel_end (commandline --selection-end)
+        set -l min_sel (math "min($sel_start, $sel_end)")
+        set anchor (math $min_sel - 1)
+    else
+        set -l cur_char (string sub -s (math $cursor + 1) -l 1 -- "$buf")
+        set -l prev_char (string sub -s $cursor -l 1 -- "$buf")
+        set -l cur_class (__fish_helix_char_class "B" "$cur_char")
+        set -l prev_class (__fish_helix_char_class "B" "$prev_char")
+        if test $cur_class -ne $prev_class
+            set anchor (math $cursor - 1)
+        end
+    end
+
+    if test $anchor -lt 0
+        return
+    end
+
+    set -l target_pos $anchor
     for i in (seq $count)
-        commandline -f backward-bigword
+        set target_pos (__fish_helix_find_prev_word_start "B" "$buf" $target_pos)
+        if test $target_pos -gt 0 -a $i -lt $count
+            set target_pos (math $target_pos - 1)
+        end
+    end
+
+    set -l diff (math "$anchor - $target_pos")
+    commandline -f end-selection
+    commandline -C $anchor
+    commandline -f begin-selection
+    for i in (seq $diff)
+        commandline -f backward-char
     end
     commandline -f repaint-mode
 end
@@ -80,6 +387,80 @@ function __fish_helix_normal_E --description 'Helix normal mode: select next WOR
     commandline -f end-selection begin-selection
     for i in (seq $count)
         commandline -f forward-bigword-end
+    end
+    commandline -f repaint-mode
+end
+
+function __fish_helix_visual_w --description 'Helix visual mode: extend selection to next word start'
+    set -l count (__fish_helix_consume_count)
+    set -l buf (commandline -b)
+    set -l cursor (commandline -C)
+    set -l target_end $cursor
+    for i in (seq $count)
+        set target_end (__fish_helix_find_next_word_end "w" "$buf" (math $target_end + 1))
+    end
+    set -l diff (math "$target_end - $cursor")
+    if test $diff -gt 0
+        for i in (seq $diff)
+            commandline -f forward-char
+        end
+    end
+    commandline -f repaint-mode
+end
+
+function __fish_helix_visual_W --description 'Helix visual mode: extend selection to next WORD start'
+    set -l count (__fish_helix_consume_count)
+    set -l buf (commandline -b)
+    set -l cursor (commandline -C)
+    set -l target_end $cursor
+    for i in (seq $count)
+        set target_end (__fish_helix_find_next_word_end "W" "$buf" (math $target_end + 1))
+    end
+    set -l diff (math "$target_end - $cursor")
+    if test $diff -gt 0
+        for i in (seq $diff)
+            commandline -f forward-char
+        end
+    end
+    commandline -f repaint-mode
+end
+
+function __fish_helix_visual_b --description 'Helix visual mode: extend selection to prev word start'
+    set -l count (__fish_helix_consume_count)
+    set -l buf (commandline -b)
+    set -l cursor (commandline -C)
+    set -l target_start $cursor
+    for i in (seq $count)
+        if test $target_start -le 0
+            break
+        end
+        set target_start (__fish_helix_find_prev_word_start "w" "$buf" (math $target_start - 1))
+    end
+    set -l diff (math "$cursor - $target_start")
+    if test $diff -gt 0
+        for i in (seq $diff)
+            commandline -f backward-char
+        end
+    end
+    commandline -f repaint-mode
+end
+
+function __fish_helix_visual_B --description 'Helix visual mode: extend selection to prev WORD start'
+    set -l count (__fish_helix_consume_count)
+    set -l buf (commandline -b)
+    set -l cursor (commandline -C)
+    set -l target_start $cursor
+    for i in (seq $count)
+        if test $target_start -le 0
+            break
+        end
+        set target_start (__fish_helix_find_prev_word_start "B" "$buf" (math $target_start - 1))
+    end
+    set -l diff (math "$cursor - $target_start")
+    if test $diff -gt 0
+        for i in (seq $diff)
+            commandline -f backward-char
+        end
     end
     commandline -f repaint-mode
 end
@@ -515,8 +896,7 @@ function __fish_helix_surround_add --argument-names char
         set -l start (commandline --selection-start)
         set -l end (commandline --selection-end)
         set -l min_pos (math "min($start, $end)")
-        set -l max_pos (math "max($start, $end)")
-        set -l len (math "$max_pos - $min_pos")
+        set -l len (string length -- "$sel")
 
         commandline -f end-selection
         commandline -C $min_pos
@@ -532,8 +912,7 @@ function __fish_helix_surround_add --argument-names char
         set -l start (commandline --selection-start)
         set -l end (commandline --selection-end)
         set -l min_pos (math "min($start, $end)")
-        set -l max_pos (math "max($start, $end)")
-        set -l len (math "$max_pos - $min_pos")
+        set -l len (string length -- "$sel")
 
         commandline -f end-selection
         commandline -C $min_pos
@@ -659,7 +1038,7 @@ function __fish_helix_textobject --argument-names target_mode char
             return
         end
         set start $bounds[1]
-        set end $bounds[2]
+        set end (math $bounds[2] - 1)
     else
         set -l pair (__fish_helix_find_pair "$char" "$buf" "$cursor")
         if test (count $pair) -lt 2
@@ -670,25 +1049,29 @@ function __fish_helix_textobject --argument-names target_mode char
 
         if test "$target_mode" = "i"
             set start (math $open_idx + 1)
-            set end $close_idx
+            set end (math $close_idx - 1)
         else
             set start $open_idx
-            set end (math $close_idx + 1)
+            set end $close_idx
         end
+    end
+
+    if test $end -lt $start
+        commandline -f end-selection
+        commandline -C $start
+        set fish_bind_mode default
+        commandline -f repaint-mode
+        return
     end
 
     set -l diff (math "$end - $start")
     commandline -f end-selection
     commandline -C $start
-    if test $diff -gt 0
-        commandline -f begin-selection
-        for i in (seq $diff)
-            commandline -f forward-char
-        end
-        set fish_bind_mode visual
-    else
-        set fish_bind_mode default
+    commandline -f begin-selection
+    for i in (seq $diff)
+        commandline -f forward-char
     end
+    set fish_bind_mode visual
     commandline -f repaint-mode
 end
 
@@ -1075,11 +1458,11 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M visual l forward-char
     bind --preset -M visual k up-line
     bind --preset -M visual j down-line
-    bind --preset -M visual w forward-word-vi
-    bind --preset -M visual b backward-word
+    bind --preset -M visual w __fish_helix_visual_w
+    bind --preset -M visual b __fish_helix_visual_b
     bind --preset -M visual e forward-word-end
-    bind --preset -M visual W forward-bigword-vi
-    bind --preset -M visual B backward-bigword
+    bind --preset -M visual W __fish_helix_visual_W
+    bind --preset -M visual B __fish_helix_visual_B
     bind --preset -M visual E forward-bigword-end
 
     bind --preset -M visual f forward-jump
