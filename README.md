@@ -33,6 +33,9 @@ The goal of this plugin is to provide a complete and authentic Helix editing exp
 - **Surround & Match Mode (`m`)**:
   - `mm` jumps to the matching bracket or quote.
   - `ms<char>` surrounds active selections (or words under the cursor) with matched pairs (`"`, `'`, `()`, `[]`, `{}`, `<>`).
+  - `mr<old><new>` replaces surrounding delimiter (e.g. `mr"'` or `mrb[`).
+  - `md<char>` deletes surrounding delimiter (e.g. `md"` or `md(`).
+  - `mi<char>` / `ma<char>` selects inside / around textobjects (`"`, `'`, `` ` ``, `()`, `[]`, `{}`, `<>`, `w`, `W`).
 - **Goto Navigation (`g`)**:
   - `gh` (line start), `gl` (line end), `gs` (first non-whitespace), `gg` (buffer start), `ge` (buffer end).
 - **Terminal Visual Indicators & Cursor Morphing**:
@@ -162,15 +165,34 @@ Actions execute immediately on whatever is currently selected:
 
 ### 6. Match & Surround Sub-Mode (`m`)
 
-| Key | Description |
-|---|---|
-| `mm` | Jump to matching bracket or quote |
-| `ms<char>` | Surround active selection (or word under cursor) with delimiter `<char>` |
+| Key | Helix Command | Description |
+|---|---|---|
+| `mm` | `match_brackets` | Jump to matching bracket or quote |
+| `ms<char>` | `surround_add` | Surround active selection (or word under cursor) with delimiter `<char>` |
+| `mr<old><new>` | `surround_replace` | Replace surrounding delimiter `<old>` with `<new>` (e.g. `mr"'` or `mrb[`) |
+| `md<char>` | `surround_delete` | Delete surrounding delimiter `<char>` (e.g. `md"` or `md(`) |
+| `mi<char>` | `select_textobject_inner` | Select **inside** textobject into Select/Visual mode (`"`, `'`, `` ` ``, `()`, `[]`, `{}`, `<>`, `w`, `W`) |
+| `ma<char>` | `select_textobject_around` | Select **around** textobject including delimiters and surrounding whitespace |
 
-**Supported Surround Delimiters:**
-- Matching Pairs: `()`, `[]`, `{}`, `<>`
-- Quotes: `"`, `'`, `` ` ``
-- Arbitrary symbols: `*`, `_`, `/`, etc.
+**Supported Delimiters & Textobjects:**
+- **Quotes**: `"` (double quote), `'` (single quote), `` ` `` (backtick)
+- **Matching Pairs & Aliases**:
+  - `()` or `b`: Parentheses / Round brackets
+  - `[]` or `r`: Square / Rectangular brackets
+  - `{}` or `B`: Curly braces / Blocks
+  - `<>`: Angle brackets
+- **Words (for `mi`/`ma`)**:
+  - `w`: Word (alphanumeric chunk)
+  - `W`: WORD (whitespace-delimited token)
+- **Arbitrary symbols**: `*`, `_`, `/`, etc.
+
+**Common Shell Workflows:**
+- `mi" c` → change the contents inside quotes (`"..."`) and enter Insert mode
+- `ma" d` → delete the entire quoted token including quotes
+- `md"` → strip quotes around cursor/selection (`"foo"` → `foo`)
+- `mr"'` → convert double quotes to single quotes (`"foo"` → `'foo'`)
+- `mrb[` → replace enclosing `(...)` with `[...]`
+
 
 ---
 
