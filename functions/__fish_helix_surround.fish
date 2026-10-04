@@ -209,14 +209,7 @@ function __fish_helix_surround_delete --argument-names char
     set fish_bind_mode default
 end
 
-function __fish_helix_surround_save_old --argument-names char
-    set -g __fish_helix_surround_old "$char"
-end
-
-function __fish_helix_surround_replace --argument-names new_char
-    set -l old_char "$__fish_helix_surround_old"
-    set -g __fish_helix_surround_old ""
-
+function __fish_helix_surround_replace_direct --argument-names old_char new_char
     set -l buf (commandline -b)
     set -l cursor (commandline -C)
     set -l len (string length -- "$buf")
@@ -252,4 +245,14 @@ function __fish_helix_surround_replace --argument-names new_char
     commandline -C $cursor
     commandline -f repaint-mode
     set fish_bind_mode default
+end
+
+function __fish_helix_surround_save_old --argument-names char
+    set -g __fish_helix_surround_old "$char"
+end
+
+function __fish_helix_surround_replace --argument-names new_char
+    set -l old_char "$__fish_helix_surround_old"
+    set -g __fish_helix_surround_old ""
+    __fish_helix_surround_replace_direct "$old_char" "$new_char"
 end

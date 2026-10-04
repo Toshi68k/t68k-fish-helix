@@ -594,14 +594,7 @@ function __fish_helix_surround_delete --argument-names char
     set fish_bind_mode default
 end
 
-function __fish_helix_surround_save_old --argument-names char
-    set -g __fish_helix_surround_old "$char"
-end
-
-function __fish_helix_surround_replace --argument-names new_char
-    set -l old_char "$__fish_helix_surround_old"
-    set -g __fish_helix_surround_old ""
-
+function __fish_helix_surround_replace_direct --argument-names old_char new_char
     set -l buf (commandline -b)
     set -l cursor (commandline -C)
     set -l len (string length -- "$buf")
@@ -637,6 +630,16 @@ function __fish_helix_surround_replace --argument-names new_char
     commandline -C $cursor
     commandline -f repaint-mode
     set fish_bind_mode default
+end
+
+function __fish_helix_surround_save_old --argument-names char
+    set -g __fish_helix_surround_old "$char"
+end
+
+function __fish_helix_surround_replace --argument-names new_char
+    set -l old_char "$__fish_helix_surround_old"
+    set -g __fish_helix_surround_old ""
+    __fish_helix_surround_replace_direct "$old_char" "$new_char"
 end
 
 function __fish_helix_textobject --argument-names target_mode char
@@ -1002,11 +1005,6 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     # --- Match Sub-Mode (m) ---
     # mm jumps to matching bracket
     bind --preset -M default m,m jump-to-matching-bracket
-    bind --preset -M default -m helix_surround_add m,s repaint-mode
-    bind --preset -M default -m helix_surround_delete m,d repaint-mode
-    bind --preset -M default -m helix_surround_replace_old m,r repaint-mode
-    bind --preset -M default -m helix_textobject_inside m,i repaint-mode
-    bind --preset -M default -m helix_textobject_around m,a repaint-mode
 
     # --- Space Sub-Mode ( ) ---
     bind --preset -M default ' ',y fish_clipboard_copy
@@ -1037,34 +1035,37 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M helix_replace_one -m default escape cancel repaint-mode
     bind --preset -M helix_replace_one -m default ctrl-\[ cancel repaint-mode
 
-    # --- Match & Surround Sub-Modes ---
-    # ms<char>: Surround Add
-    bind --preset -M helix_surround_add -m default '' '__fish_helix_surround_add $argv'
-    bind --preset -M helix_surround_add -m default escape cancel repaint-mode
-    bind --preset -M helix_surround_add -m default ctrl-\[ cancel repaint-mode
+    # --- Match & Surround Sequences (Direct bindings for instant execution) ---
+    # mm: Match Brackets
+    bind --preset -M default m,m jump-to-matching-bracket
+    bind --preset -M visual m,m jump-to-matching-bracket
 
-    # md<char>: Surround Delete
-    bind --preset -M helix_surround_delete -m default '' '__fish_helix_surround_delete $argv'
-    bind --preset -M helix_surround_delete -m default escape cancel repaint-mode
-    bind --preset -M helix_surround_delete -m default ctrl-\[ cancel repaint-mode
+    # Textobjects: mi<char> (inside) and ma<char> (around)
+    set -l to_delims '"' "'" '`' '(' ')' b '[' ']' r '{' '}' B '<' '>' w W
+    for d in $to_delims
+        bind --preset -M default m,i,$d "__fish_helix_textobject i '$d'"
+        bind --preset -M default m,a,$d "__fish_helix_textobject a '$d'"
+        bind --preset -M visual m,i,$d "__fish_helix_textobject i '$d'"
+        bind --preset -M visual m,a,$d "__fish_helix_textobject a '$d'"
+    end
 
-    # mr<old><new>: Surround Replace
-    bind --preset -M helix_surround_replace_old -m helix_surround_replace_new '' '__fish_helix_surround_save_old $argv'
-    bind --preset -M helix_surround_replace_old -m default escape cancel repaint-mode
-    bind --preset -M helix_surround_replace_old -m default ctrl-\[ cancel repaint-mode
-    bind --preset -M helix_surround_replace_new -m default '' '__fish_helix_surround_replace $argv'
-    bind --preset -M helix_surround_replace_new -m default escape cancel repaint-mode
-    bind --preset -M helix_surround_replace_new -m default ctrl-\[ cancel repaint-mode
+    # Surround Delete: md<char> & Surround Add: ms<char>
+    set -l surr_delims '"' "'" '`' '(' ')' b '[' ']' r '{' '}' B '<' '>' '*' '_' '/'
+    for d in $surr_delims
+        bind --preset -M default m,d,$d "__fish_helix_surround_delete '$d'"
+        bind --preset -M visual m,d,$d "__fish_helix_surround_delete '$d'"
+        bind --preset -M default m,s,$d "__fish_helix_surround_add '$d'"
+        bind --preset -M visual m,s,$d "__fish_helix_surround_add '$d'"
+    end
 
-    # mi<char>: Textobject Inside
-    bind --preset -M helix_textobject_inside -m visual '' '__fish_helix_textobject i $argv'
-    bind --preset -M helix_textobject_inside -m default escape cancel repaint-mode
-    bind --preset -M helix_textobject_inside -m default ctrl-\[ cancel repaint-mode
-
-    # ma<char>: Textobject Around
-    bind --preset -M helix_textobject_around -m visual '' '__fish_helix_textobject a $argv'
-    bind --preset -M helix_textobject_around -m default escape cancel repaint-mode
-    bind --preset -M helix_textobject_around -m default ctrl-\[ cancel repaint-mode
+    # Surround Replace: mr<old><new>
+    set -l rep_delims '"' "'" '`' '(' ')' b '[' ']' r '{' '}' B '<' '>'
+    for old in $rep_delims
+        for new in $rep_delims
+            bind --preset -M default m,r,$old,$new "__fish_helix_surround_replace_direct '$old' '$new'"
+            bind --preset -M visual m,r,$old,$new "__fish_helix_surround_replace_direct '$old' '$new'"
+        end
+    end
 
     # ==========================================
     # --- Select / Extend Mode (visual) ---
@@ -1137,12 +1138,6 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M visual \` 'commandline -f downcase-selection end-selection repaint-mode; set fish_bind_mode default'
     bind --preset -M visual \e\` 'commandline -f upcase-selection end-selection repaint-mode; set fish_bind_mode default'
 
-    # Match mode in visual mode
-    bind --preset -M visual -m helix_surround_add m,s repaint-mode
-    bind --preset -M visual -m helix_surround_delete m,d repaint-mode
-    bind --preset -M visual -m helix_surround_replace_old m,r repaint-mode
-    bind --preset -M visual -m helix_textobject_inside m,i repaint-mode
-    bind --preset -M visual -m helix_textobject_around m,a repaint-mode
 
     bind --preset -M visual u undo
     bind --preset -M visual U redo
