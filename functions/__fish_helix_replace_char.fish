@@ -38,11 +38,11 @@ function __fish_helix_execute_replace --argument-names char --description 'Helix
 
     set -l prefix ""
     if test $r_start -gt 0
-        set prefix (string sub -s 1 -l $r_start -- "$buf")
+        set prefix (string sub -s 1 -l $r_start -- "$buf" | string collect)
     end
     set -l suffix ""
     if test (math $r_start + $r_len) -lt $len
-        set suffix (string sub -s (math $r_start + $r_len + 1) -- "$buf")
+        set suffix (string sub -s (math $r_start + $r_len + 1) -- "$buf" | string collect)
     end
 
     set -l new_buf "$prefix$rep_str$suffix"
