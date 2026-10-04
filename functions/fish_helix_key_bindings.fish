@@ -1589,12 +1589,12 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M default 0 "if test -n \"\$__fish_helix_count\"; __fish_helix_arg_digit 0; end"
 
     # --- Normal Mode: Insert Transitions ---
-    bind --preset -M default i 'set fish_bind_mode insert; commandline -f repaint-mode'
-    bind --preset -M default a 'commandline -f forward-char; set fish_bind_mode insert; commandline -f repaint-mode'
-    bind --preset -M default I 'commandline -f beginning-of-line; set fish_bind_mode insert; commandline -f repaint-mode'
-    bind --preset -M default A 'commandline -f end-of-line; set fish_bind_mode insert; commandline -f repaint-mode'
-    bind --preset -M default o 'commandline -f end-of-line; commandline -i \n; set fish_bind_mode insert; commandline -f repaint-mode'
-    bind --preset -M default O 'commandline -f beginning-of-line; commandline -i \n; commandline -f backward-char; set fish_bind_mode insert; commandline -f repaint-mode'
+    bind --preset -M default -m insert i 'set fish_bind_mode insert; commandline -f repaint-mode'
+    bind --preset -M default -m insert a 'set -g fish_cursor_end_mode exclusive; set fish_bind_mode insert' forward-char repaint-mode
+    bind --preset -M default -m insert I 'set fish_bind_mode insert' beginning-of-line repaint-mode
+    bind --preset -M default -m insert A 'set -g fish_cursor_end_mode exclusive; set fish_bind_mode insert' end-of-line repaint-mode
+    bind --preset -M default -m insert o 'set -g fish_cursor_end_mode exclusive; set fish_bind_mode insert' insert-line-under repaint-mode
+    bind --preset -M default -m insert O 'set -g fish_cursor_end_mode exclusive; set fish_bind_mode insert' insert-line-over repaint-mode
 
     # --- Normal Mode: Select / Extend Mode Transition ---
     bind --preset -M default v 'commandline -f begin-selection repaint-mode; set fish_bind_mode visual'
@@ -1843,6 +1843,12 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M visual escape 'commandline -f end-selection repaint-mode; set fish_bind_mode default'
     bind --preset -M visual ctrl-\[ 'commandline -f end-selection repaint-mode; set fish_bind_mode default'
 
+    # Insert mode transitions from visual mode (Helix: i/a/I/A collapse selection and enter insert)
+    bind --preset -M visual -m insert i 'commandline -f end-selection repaint-mode; set fish_bind_mode insert'
+    bind --preset -M visual -m insert a 'set -g fish_cursor_end_mode exclusive; set fish_bind_mode insert' forward-char end-selection repaint-mode
+    bind --preset -M visual -m insert I 'commandline -f end-selection beginning-of-line repaint-mode; set fish_bind_mode insert'
+    bind --preset -M visual -m insert A 'set -g fish_cursor_end_mode exclusive; set fish_bind_mode insert' end-of-line end-selection repaint-mode
+
     # Actions on selection
     bind --preset -M visual -m default d 'commandline -f kill-selection end-selection repaint-mode; set fish_bind_mode default'
     bind --preset -M visual \ed '__fish_helix_delete_noyank; set fish_bind_mode default'
@@ -1887,6 +1893,7 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
         switch $fish_bind_mode
             case insert replace_one helix_replace_one
                 set -g fish_cursor_end_mode exclusive
+                set -g __fish_helix_count
             case '*'
                 set -g fish_cursor_end_mode inclusive
         end
