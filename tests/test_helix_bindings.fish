@@ -1186,6 +1186,201 @@ assert_equal "$match_vis[4]" "ls -" "Visual mode w press 2 extends selection acr
 assert_equal "$match_vis[5]" "visual" "Visual mode w press 2 maintains visual mode"
 assert_equal "$match_vis[6]" "ls -ltra " "Visual mode w press 3 extends selection across 'ls -ltra '"
 
+# ==============================================================================
+# Phase 3 Tests: Selection Manipulation (_, J, Alt+J, Alt+:, r)
+# ==============================================================================
+echo "--- Testing Phase 3: Selection Manipulation & Replace ---"
+
+# 1. Keybindings check
+set -l bind_trim_def (bind -M default _ | string trim)
+assert_contains "$bind_trim_def" "__fish_helix_trim_selection" "_ in default mode trims selection"
+
+set -l bind_trim_vis (bind -M visual _ | string trim)
+assert_contains "$bind_trim_vis" "__fish_helix_trim_selection" "_ in visual mode trims selection"
+
+set -l bind_join_def (bind -M default J | string trim)
+assert_contains "$bind_join_def" "__fish_helix_join_lines with_space" "J in default mode joins lines with space"
+
+set -l bind_join_nosp_def (bind -M default \eJ | string trim)
+assert_contains "$bind_join_nosp_def" "__fish_helix_join_lines no_space" "Alt+J in default mode joins lines without space"
+
+set -l bind_join_vis (bind -M visual J | string trim)
+assert_contains "$bind_join_vis" "__fish_helix_join_lines with_space" "J in visual mode joins lines with space"
+
+set -l bind_join_nosp_vis (bind -M visual \eJ | string trim)
+assert_contains "$bind_join_nosp_vis" "__fish_helix_join_lines no_space" "Alt+J in visual mode joins lines without space"
+
+set -l bind_fwd_def (bind -M default \e: | string trim)
+assert_contains "$bind_fwd_def" "__fish_helix_ensure_forward_selection" "Alt+: in default mode ensures forward selection"
+
+set -l bind_fwd_vis (bind -M visual \e: | string trim)
+assert_contains "$bind_fwd_vis" "__fish_helix_ensure_forward_selection" "Alt+: in visual mode ensures forward selection"
+
+set -l bind_rep_def (bind -M default r | string trim)
+assert_contains "$bind_rep_def" "__fish_helix_prepare_replace" "r in default mode prepares character replace"
+
+set -l bind_rep_vis (bind -M visual r | string trim)
+assert_contains "$bind_rep_vis" "__fish_helix_prepare_replace" "r in visual mode prepares character replace"
+
+# 2. Interactive execution: _ (Trim selection)
+set -l test_trim_raw (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'ls -ltra'
+    commandline -C 0
+
+    set -g cur_pos 2
+    set -g sel_start 0
+    set -g in_sel 1
+
+    function commandline
+        if test (count \$argv) -ge 2; and test \"\$argv[1]\" = \"-C\"
+            set -g cur_pos \$argv[2]
+            if test \$in_sel -eq 0
+                set -g sel_start \$cur_pos
+            end
+        else if contains -- -f \$argv
+            for f in \$argv[2..-1]
+                if test \"\$f\" = \"begin-selection\"
+                    set -g in_sel 1
+                    set -g sel_start \$cur_pos
+                else if test \"\$f\" = \"end-selection\"
+                    set -g in_sel 0
+                    set -g sel_start -1
+                else if test \"\$f\" = \"forward-char\"
+                    set -g cur_pos (math \$cur_pos + 1)
+                end
+            end
+        else if contains -- -C \$argv
+            echo \$cur_pos
+        else if contains -- -b \$argv
+            echo 'ls -ltra'
+        else if contains -- -s \$argv
+            if test \$in_sel -eq 1
+                set -l min_p (math \"min(\$sel_start, \$cur_pos)\")
+                set -l max_p (math \"max(\$sel_start, \$cur_pos)\")
+                string sub -s (math \$min_p + 1) -l (math \$max_p - \$min_p + 1) -- 'ls -ltra'
+            end
+        else if contains -- --selection-start \$argv
+            if test \$in_sel -eq 1
+                math \"min(\$sel_start, \$cur_pos)\"
+                return 0
+            end
+            return 1
+        else if contains -- --selection-end \$argv
+            if test \$in_sel -eq 1
+                math \"max(\$sel_start, \$cur_pos) + 1\"
+                return 0
+            end
+            return 1
+        end
+    end
+
+    __fish_helix_trim_selection
+    echo (commandline -s)
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_trim_raw" "ls" "_ trims trailing whitespace from selection 'ls '"
+
+# 3. Interactive execution: J (Join lines with space) and Alt+J (without space)
+set -l test_join_space (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r (printf '%s\n%s' 'echo hello' '    world')
+    commandline -C 0
+    __fish_helix_join_lines with_space
+    builtin commandline -b
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_join_space" "echo hello world" "J joins multiline command with space"
+
+set -l test_join_nospace (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r (printf '%s\n%s' 'git commit \\\\' '    -m test')
+    commandline -C 0
+    __fish_helix_join_lines no_space
+    builtin commandline -b
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_join_nospace" "git commit \-m test" "Alt+J joins lines without extra space"
+
+# Interactive execution: J on multiline selection
+set -l test_join_multisel (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r (printf '%s\n%s\n%s' 'prefix' '  line2' 'suffix')
+    function commandline
+        if contains -- --selection-start \$argv
+            echo 0
+            return 0
+        else if contains -- --selection-end \$argv
+            echo 14
+            return 0
+        else if contains -- -s \$argv
+            printf '%s\n%s\n' 'prefix' '  line2'
+            return 0
+        else
+            builtin commandline \$argv
+        end
+    end
+    __fish_helix_join_lines with_space
+    echo (string join ';' -- (builtin commandline -b))
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_join_multisel" "prefix line2;suffix" "J joins multiline active selection with space"
+
+# 4. Interactive execution: Alt+: (Ensure forward selection)
+set -l test_fwd_sel (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    set -g swapped 0
+    function commandline
+        if contains -- --selection-start \$argv
+            echo 5
+            return 0
+        else if contains -- --selection-end \$argv
+            echo 10
+            return 0
+        else if contains -- -C \$argv
+            echo 5
+            return 0
+        else if contains -- -f \$argv; and contains -- swap-selection-start-stop \$argv
+            set -g swapped 1
+            return 0
+        else
+            builtin commandline \$argv
+        end
+    end
+    __fish_helix_ensure_forward_selection
+    echo \$swapped
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_fwd_sel" "1" "Alt+: swaps selection start/stop when backward"
+
+# 5. Interactive execution: r single char replace and multi-char selection replace
+set -l test_rep_single (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'cat'
+    commandline -C 1
+    __fish_helix_prepare_replace
+    __fish_helix_execute_replace 'o'
+    builtin commandline -b
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_rep_single" "cot" "r replaces single char under cursor ('cat' -> 'cot')"
+
+set -l test_rep_multi (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'foo bar'
+    function commandline
+        if contains -- --selection-start \$argv
+            echo 0
+            return 0
+        else if contains -- --selection-end \$argv
+            echo 3
+            return 0
+        else if contains -- -s \$argv
+            echo 'foo'
+        else
+            builtin commandline \$argv
+        end
+    end
+    __fish_helix_prepare_replace
+    __fish_helix_execute_replace '-'
+    builtin commandline -b
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_rep_multi" "--- bar" "r replaces every character of active selection ('foo' -> '---')"
+
 echo
 echo "================================================="
 echo "Results: $passed Passed, $failed Failed"

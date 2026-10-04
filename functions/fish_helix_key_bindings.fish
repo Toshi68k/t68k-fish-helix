@@ -1075,6 +1075,217 @@ function __fish_helix_textobject --argument-names target_mode char
     commandline -f repaint-mode
 end
 
+function __fish_helix_trim_selection --description 'Helix: trim whitespace from active selection (_)'
+    if not commandline --selection-start >/dev/null 2>&1
+        return
+    end
+
+    set -l buf (string join \n -- (commandline -b))
+    set -l len (string length -- "$buf")
+    if test $len -eq 0
+        return
+    end
+
+    set -l sel_start (commandline --selection-start)
+    set -l sel_end (commandline --selection-end)
+    set -l min_pos (math "min($sel_start, $sel_end)")
+    set -l max_pos (math "max($sel_start, $sel_end)")
+
+    # In inclusive mode, sel_end is max_pos + 1 (exclusive)
+    set -l last_pos
+    if test "$fish_cursor_selection_mode" = exclusive
+        set last_pos $max_pos
+    else
+        set last_pos (math "$max_pos - 1")
+    end
+
+    # Advance min_pos past leading whitespace
+    while test $min_pos -le $last_pos
+        set -l ch (string sub -s (math $min_pos + 1) -l 1 -- "$buf")
+        if not string match -qr '^\s' -- "$ch"
+            break
+        end
+        set min_pos (math $min_pos + 1)
+    end
+
+    # Retreat last_pos past trailing whitespace
+    while test $last_pos -ge $min_pos
+        set -l ch (string sub -s (math $last_pos + 1) -l 1 -- "$buf")
+        if not string match -qr '^\s' -- "$ch"
+            break
+        end
+        set last_pos (math $last_pos - 1)
+    end
+
+    if test $min_pos -gt $last_pos
+        commandline -f end-selection
+        commandline -C $min_pos
+        commandline -f repaint-mode
+        return
+    end
+
+    set -l diff (math "$last_pos - $min_pos")
+    commandline -f end-selection
+    commandline -C $min_pos
+    commandline -f begin-selection
+    for i in (seq $diff)
+        commandline -f forward-char
+    end
+    commandline -f repaint-mode
+end
+
+function __fish_helix_join_lines --argument-names mode --description 'Helix: join lines (J / Alt+J)'
+    set -l sep " "
+    if test "$mode" = "no_space"
+        set sep ""
+    end
+
+    # Check if there is an active multiline selection
+    if commandline --selection-start >/dev/null 2>&1
+        set -l sel_start (commandline --selection-start)
+        set -l sel_end (commandline --selection-end)
+        set -l min_pos (math "min($sel_start, $sel_end)")
+        set -l max_pos (math "max($sel_start, $sel_end)")
+        set -l last_pos
+        if test "$fish_cursor_selection_mode" = exclusive
+            set last_pos $max_pos
+        else
+            set last_pos (math "$max_pos - 1")
+        end
+
+        set -l sel_lines (commandline -s)
+        if test (count $sel_lines) -gt 1
+            set -l joined_sel "$sel_lines[1]"
+            for l in $sel_lines[2..-1]
+                set -l trimmed (string replace -r '^[ \t]+' '' -- "$l")
+                set joined_sel "$joined_sel$sep$trimmed"
+            end
+
+            set -l full_buf (commandline -b | string collect)
+            set -l full_len (string length -- "$full_buf")
+
+            set -l prefix ""
+            if test $min_pos -gt 0
+                set prefix (string sub -s 1 -l $min_pos -- "$full_buf" | string collect)
+            end
+            set -l suffix ""
+            if test (math $last_pos + 1) -lt $full_len
+                set suffix (string sub -s (math $last_pos + 2) -- "$full_buf" | string collect)
+            end
+
+            set -l new_buf "$prefix$joined_sel$suffix"
+            commandline -f end-selection
+            commandline -r -- "$new_buf"
+            commandline -C $min_pos
+            commandline -f repaint-mode
+            return
+        end
+    end
+
+    # Single-line selection or no selection: join current line with next line
+    set -l lines (commandline -b)
+    set -l total_lines (count $lines)
+    if test $total_lines -le 1
+        return
+    end
+
+    set -l cur_line (commandline -L)
+    if test -z "$cur_line"; or test $cur_line -ge $total_lines
+        return
+    end
+
+    set -l join_cursor 0
+    if test $cur_line -gt 1
+        for i in (seq (math $cur_line - 1))
+            set -l line_len (string length -- "$lines[$i]")
+            set join_cursor (math "$join_cursor + $line_len + 1")
+        end
+    end
+    set -l cur_len (string length -- "$lines[$cur_line]")
+    set join_cursor (math "$join_cursor + $cur_len")
+
+    set -l next_line_idx (math $cur_line + 1)
+    set -l trimmed_next (string replace -r '^[ \t]+' '' -- "$lines[$next_line_idx]")
+    set lines[$cur_line] "$lines[$cur_line]$sep$trimmed_next"
+    set -e lines[$next_line_idx]
+
+    commandline -f end-selection
+    commandline -r -- (string join \n -- $lines)
+    commandline -C $join_cursor
+    commandline -f repaint-mode
+end
+
+function __fish_helix_ensure_forward_selection --description 'Helix: ensure selection direction is forward (Alt+:)'
+    if not commandline --selection-start >/dev/null 2>&1
+        return
+    end
+
+    set -l sel_start (commandline --selection-start)
+    set -l sel_end (commandline --selection-end)
+    set -l cursor (commandline -C)
+    set -l min_pos (math "min($sel_start, $sel_end)")
+    set -l max_pos (math "max($sel_start, $sel_end)")
+
+    if test "$cursor" = "$min_pos" -a "$max_pos" -gt "$min_pos"
+        commandline -f swap-selection-start-stop repaint-mode
+    end
+end
+
+function __fish_helix_prepare_replace --description 'Helix: prepare replace character (r)'
+    set -g __fish_helix_replace_start -1
+    set -g __fish_helix_replace_len 0
+    if commandline --selection-start >/dev/null 2>&1
+        set -l sel (string join \n -- (commandline -s))
+        set -l sel_start (commandline --selection-start)
+        set -l sel_end (commandline --selection-end)
+        set -g __fish_helix_replace_start (math "min($sel_start, $sel_end)")
+        set -g __fish_helix_replace_len (string length -- "$sel")
+    else
+        set -g __fish_helix_replace_start (commandline -C)
+        set -g __fish_helix_replace_len 1
+    end
+    set fish_bind_mode helix_replace_one
+    commandline -f repaint-mode
+end
+
+function __fish_helix_execute_replace --argument-names char --description 'Helix: execute character replace'
+    set -l buf (string join \n -- (commandline -b))
+    set -l len (string length -- "$buf")
+    set -l r_start $__fish_helix_replace_start
+    set -l r_len $__fish_helix_replace_len
+    set -e __fish_helix_replace_start
+    set -e __fish_helix_replace_len
+
+    if test -z "$r_start" -o $r_start -lt 0
+        set r_start (commandline -C)
+        set r_len 1
+    end
+
+    if test $r_start -ge $len
+        set fish_bind_mode default
+        commandline -f repaint-mode
+        return
+    end
+
+    set -l rep_str (string repeat -n $r_len -- "$char")
+
+    set -l prefix ""
+    if test $r_start -gt 0
+        set prefix (string sub -s 1 -l $r_start -- "$buf")
+    end
+    set -l suffix ""
+    if test (math $r_start + $r_len) -lt $len
+        set suffix (string sub -s (math $r_start + $r_len + 1) -- "$buf")
+    end
+
+    set -l new_buf "$prefix$rep_str$suffix"
+    commandline -f end-selection
+    commandline -r -- "$new_buf"
+    commandline -C $r_start
+    set fish_bind_mode default
+    commandline -f repaint-mode
+end
+
 
 if not functions -q fish_helix_cursor
     function fish_helix_cursor --description 'Set cursor shape for different Helix modes'
@@ -1341,6 +1552,13 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M default ';' 'commandline -f end-selection repaint-mode'
     # Alt-; flips selection direction
     bind --preset -M default \e\; 'commandline -f swap-selection-start-stop repaint-mode'
+    # _ trims whitespace from selection
+    bind --preset -M default _ __fish_helix_trim_selection
+    # Alt+: ensures selection direction is forward
+    bind --preset -M default \e: __fish_helix_ensure_forward_selection
+    # J / Alt+J joins lines
+    bind --preset -M default J '__fish_helix_join_lines with_space'
+    bind --preset -M default \eJ '__fish_helix_join_lines no_space'
 
     # --- Normal Mode: Changes & Deletions (Selection-First) ---
     # d deletes selection (or char under cursor if no selection)
@@ -1412,11 +1630,21 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M default n history-search-backward
     bind --preset -M default N history-search-forward
 
-    # --- Single Character Replace Mode (r) ---
-    bind --preset -M default -m helix_replace_one r repaint-mode
-    bind --preset -M helix_replace_one -m default '' 'set -g fish_cursor_end_mode exclusive; commandline -f delete-char self-insert backward-char repaint-mode; set -g fish_cursor_end_mode inclusive'
-    bind --preset -M helix_replace_one -m default escape cancel repaint-mode
-    bind --preset -M helix_replace_one -m default ctrl-\[ cancel repaint-mode
+    # --- Character Replace Mode (r) ---
+    bind --preset -M default r __fish_helix_prepare_replace
+
+    set -l replace_chars
+    for i in (seq 32 126)
+        set -a replace_chars (printf "\\x$(printf '%x' $i)")
+    end
+    for c in $replace_chars
+        set -l esc_c (string escape -- "$c")
+        bind --preset -M helix_replace_one -m default -- $c "__fish_helix_execute_replace $esc_c"
+    end
+    bind --preset -M helix_replace_one -m default enter "__fish_helix_execute_replace '\n'"
+    bind --preset -M helix_replace_one -m default escape 'set -e __fish_helix_replace_start; set -e __fish_helix_replace_len; commandline -f repaint-mode'
+    bind --preset -M helix_replace_one -m default ctrl-\[ 'set -e __fish_helix_replace_start; set -e __fish_helix_replace_len; commandline -f repaint-mode'
+    bind --preset -M helix_replace_one -m default '' 'set -e __fish_helix_replace_start; set -e __fish_helix_replace_len; commandline -f repaint-mode'
 
     # --- Match & Surround Sequences (Direct bindings for instant execution) ---
     # mm: Match Brackets
@@ -1503,6 +1731,11 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M visual % 'commandline -f beginning-of-buffer begin-selection end-of-buffer repaint-mode'
     bind --preset -M visual ';' 'commandline -f end-selection repaint-mode; set fish_bind_mode default'
     bind --preset -M visual \e\; 'commandline -f swap-selection-start-stop repaint-mode'
+    bind --preset -M visual _ __fish_helix_trim_selection
+    bind --preset -M visual \e: __fish_helix_ensure_forward_selection
+    bind --preset -M visual J '__fish_helix_join_lines with_space; set fish_bind_mode default'
+    bind --preset -M visual \eJ '__fish_helix_join_lines no_space; set fish_bind_mode default'
+    bind --preset -M visual r __fish_helix_prepare_replace
     bind --preset -M visual v 'commandline -f end-selection repaint-mode; set fish_bind_mode default'
     bind --preset -M visual escape 'commandline -f end-selection repaint-mode; set fish_bind_mode default'
     bind --preset -M visual ctrl-\[ 'commandline -f end-selection repaint-mode; set fish_bind_mode default'
