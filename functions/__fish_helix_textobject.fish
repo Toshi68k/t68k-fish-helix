@@ -83,7 +83,7 @@ function __fish_helix_textobject --argument-names target_mode char
             return
         end
         set start $bounds[1]
-        set end $bounds[2]
+        set end (math $bounds[2] - 1)
     else
         set -l pair (__fish_helix_find_pair "$char" "$buf" "$cursor")
         if test (count $pair) -lt 2
@@ -94,24 +94,28 @@ function __fish_helix_textobject --argument-names target_mode char
 
         if test "$target_mode" = "i"
             set start (math $open_idx + 1)
-            set end $close_idx
+            set end (math $close_idx - 1)
         else
             set start $open_idx
-            set end (math $close_idx + 1)
+            set end $close_idx
         end
+    end
+
+    if test $end -lt $start
+        commandline -f end-selection
+        commandline -C $start
+        set fish_bind_mode default
+        commandline -f repaint-mode
+        return
     end
 
     set -l diff (math "$end - $start")
     commandline -f end-selection
     commandline -C $start
-    if test $diff -gt 0
-        commandline -f begin-selection
-        for i in (seq $diff)
-            commandline -f forward-char
-        end
-        set fish_bind_mode visual
-    else
-        set fish_bind_mode default
+    commandline -f begin-selection
+    for i in (seq $diff)
+        commandline -f forward-char
     end
+    set fish_bind_mode visual
     commandline -f repaint-mode
 end

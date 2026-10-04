@@ -397,47 +397,46 @@ set -g fish_helix_atuin $orig_atuin
 echo
 echo "--- Testing Match Mode Extensions (Textobjects & Surround) ---"
 
-# Key bindings in default mode
-set -l bind_md (bind -M default m,d | string trim)
-assert_contains "$bind_md" "helix_surround_delete" "md in normal mode enters surround delete"
+# Direct sequence bindings in default mode
+set -l bind_mi_quote (bind -M default m,i,\" | string trim)
+assert_contains "$bind_mi_quote" "__fish_helix_textobject i" "mi\" in normal mode binds to textobject inside quote"
 
-set -l bind_mr (bind -M default m,r | string trim)
-assert_contains "$bind_mr" "helix_surround_replace_old" "mr in normal mode enters surround replace"
+set -l bind_ma_quote (bind -M default m,a,\" | string trim)
+assert_contains "$bind_ma_quote" "__fish_helix_textobject a" "ma\" in normal mode binds to textobject around quote"
 
-set -l bind_mi (bind -M default m,i | string trim)
-assert_contains "$bind_mi" "helix_textobject_inside" "mi in normal mode enters textobject inside"
+set -l bind_mi_w (bind -M default m,i,w | string trim)
+assert_contains "$bind_mi_w" "__fish_helix_textobject i" "miw in normal mode binds to textobject inside word"
 
-set -l bind_ma (bind -M default m,a | string trim)
-assert_contains "$bind_ma" "helix_textobject_around" "ma in normal mode enters textobject around"
+set -l bind_ma_w (bind -M default m,a,w | string trim)
+assert_contains "$bind_ma_w" "__fish_helix_textobject a" "maw in normal mode binds to textobject around word"
 
-# Key bindings in visual mode
-set -l bind_vis_md (bind -M visual m,d | string trim)
-assert_contains "$bind_vis_md" "helix_surround_delete" "md in visual mode enters surround delete"
+set -l bind_mi_paren (bind -M default m,i,\( | string trim)
+assert_contains "$bind_mi_paren" "__fish_helix_textobject i" "mi( in normal mode binds to textobject inside paren"
 
-set -l bind_vis_mr (bind -M visual m,r | string trim)
-assert_contains "$bind_vis_mr" "helix_surround_replace_old" "mr in visual mode enters surround replace"
+set -l bind_mi_b (bind -M default m,i,b | string trim)
+assert_contains "$bind_mi_b" "__fish_helix_textobject i" "mib in normal mode binds to textobject inside paren alias"
 
-set -l bind_vis_mi (bind -M visual m,i | string trim)
-assert_contains "$bind_vis_mi" "helix_textobject_inside" "mi in visual mode enters textobject inside"
+set -l bind_md_quote (bind -M default m,d,\" | string trim)
+assert_contains "$bind_md_quote" "__fish_helix_surround_delete" "md\" in normal mode binds to surround delete quote"
 
-set -l bind_vis_ma (bind -M visual m,a | string trim)
-assert_contains "$bind_vis_ma" "helix_textobject_around" "ma in visual mode enters textobject around"
+set -l bind_ms_quote (bind -M default m,s,\" | string trim)
+assert_contains "$bind_ms_quote" "__fish_helix_surround_add" "ms\" in normal mode binds to surround add quote"
 
-# Sub-mode transitions and actions
-set -l bind_sub_md (bind -M helix_surround_delete '' | string trim)
-assert_contains "$bind_sub_md" "__fish_helix_surround_delete" "helix_surround_delete invokes __fish_helix_surround_delete"
+set -l bind_mr_quote (bind -M default m,r,\",\' | string trim)
+assert_contains "$bind_mr_quote" "__fish_helix_surround_replace_direct" "mr\"' in normal mode binds to surround replace direct"
 
-set -l bind_sub_mr_old (bind -M helix_surround_replace_old '' | string trim)
-assert_contains "$bind_sub_mr_old" "__fish_helix_surround_save_old" "helix_surround_replace_old saves old char"
+# Direct sequence bindings in visual mode
+set -l bind_vis_mi (bind -M visual m,i,\" | string trim)
+assert_contains "$bind_vis_mi" "__fish_helix_textobject i" "mi\" in visual mode binds to textobject inside quote"
 
-set -l bind_sub_mr_new (bind -M helix_surround_replace_new '' | string trim)
-assert_contains "$bind_sub_mr_new" "__fish_helix_surround_replace" "helix_surround_replace_new invokes replace"
+set -l bind_vis_ma (bind -M visual m,a,\" | string trim)
+assert_contains "$bind_vis_ma" "__fish_helix_textobject a" "ma\" in visual mode binds to textobject around quote"
 
-set -l bind_sub_mi (bind -M helix_textobject_inside '' | string trim)
-assert_contains "$bind_sub_mi" "__fish_helix_textobject i" "helix_textobject_inside invokes __fish_helix_textobject i"
+set -l bind_vis_md (bind -M visual m,d,\" | string trim)
+assert_contains "$bind_vis_md" "__fish_helix_surround_delete" "md\" in visual mode binds to surround delete quote"
 
-set -l bind_sub_ma (bind -M helix_textobject_around '' | string trim)
-assert_contains "$bind_sub_ma" "__fish_helix_textobject a" "helix_textobject_around invokes __fish_helix_textobject a"
+set -l bind_vis_ms (bind -M visual m,s,\" | string trim)
+assert_contains "$bind_vis_ms" "__fish_helix_surround_add" "ms\" in visual mode binds to surround add quote"
 
 # Helper: __fish_helix_get_surround_pair with aliases (b, r, B)
 set -l pair_b (__fish_helix_get_surround_pair 'b')
@@ -575,6 +574,617 @@ set -l test_clip_char (fish -i --no-config -c "
     commandline -b
 " 2>&1 | tail -n 1 | string trim)
 assert_equal "$test_clip_char" "aXc" "Clipboard replace replaces char under cursor when no selection"
+
+# 10. Verify Selection Accuracy (Textobjects mi/ma & Word motions w/W/b/B)
+echo
+echo "--- Testing Selection Accuracy (Textobjects & Word Motions) ---"
+
+set -l test_buf "git commit -m \"test\""
+set -l w_end_0 (__fish_helix_find_next_word_end "w" "$test_buf" 0)
+assert_equal "$w_end_0" "3" "find_next_word_end w from 0 stops on trailing space before commit"
+
+set -l w_end_4 (__fish_helix_find_next_word_end "w" "$test_buf" 4)
+assert_equal "$w_end_4" "10" "find_next_word_end w from 4 stops on trailing space before -m"
+
+set -l w_end_11 (__fish_helix_find_next_word_end "w" "$test_buf" 11)
+assert_equal "$w_end_11" "11" "find_next_word_end w from 11 stops on - (hyphen is its own punctuation word)"
+
+set -l w_end_12 (__fish_helix_find_next_word_end "w" "$test_buf" 12)
+assert_equal "$w_end_12" "13" "find_next_word_end w from 12 selects m and trailing space"
+
+set -l W_end_11 (__fish_helix_find_next_word_end "W" "$test_buf" 11)
+assert_equal "$W_end_11" "13" "find_next_word_end W from 11 considers hyphen part of BIGWORD -m and trailing space"
+
+set -l b_start_3 (__fish_helix_find_prev_word_start "w" "$test_buf" 3)
+assert_equal "$b_start_3" "0" "find_prev_word_start w from space 3 lands on git start"
+
+set -l b_start_10 (__fish_helix_find_prev_word_start "w" "$test_buf" 10)
+assert_equal "$b_start_10" "4" "find_prev_word_start w from space 10 lands on commit start"
+
+set -l b_start_7 (__fish_helix_find_prev_word_start "w" "$test_buf" 7)
+assert_equal "$b_start_7" "4" "find_prev_word_start w from within commit lands on commit start"
+
+# Underscore and equals tests: FOO_BAR=baz
+set -l env_buf "FOO_BAR=baz"
+set -l env_w_0 (__fish_helix_find_next_word_end "w" "$env_buf" 0)
+assert_equal "$env_w_0" "6" "find_next_word_end w considers underscore part of word FOO_BAR"
+
+set -l env_w_7 (__fish_helix_find_next_word_end "w" "$env_buf" 7)
+assert_equal "$env_w_7" "7" "find_next_word_end w considers = its own word"
+
+set -l env_w_8 (__fish_helix_find_next_word_end "w" "$env_buf" 8)
+assert_equal "$env_w_8" "10" "find_next_word_end w selects baz"
+
+set -l env_W_0 (__fish_helix_find_next_word_end "W" "$env_buf" 0)
+assert_equal "$env_W_0" "10" "find_next_word_end W considers = part of BIGWORD FOO_BAR=baz"
+
+# Verify normal mode w does not switch to visual mode
+set -l test_w_mode (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'git commit -m'
+    commandline -C 0
+    __fish_helix_normal_w
+    echo \$fish_bind_mode
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_w_mode" "default" "Normal mode w keeps mode as default ([NOR]), not visual ([SEL])"
+
+# Interactive textobject selection: mi" on 'ls -ltra "test"'
+set -l test_mi_sel (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'ls -ltra \"test\"'
+    commandline -C 11
+    set -g recorded_C
+    set -g recorded_diff 0
+    function commandline
+        if test (count \$argv) -ge 2; and test \"\$argv[1]\" = \"-C\"
+            set -g recorded_C \$argv[2]
+            builtin commandline \$argv
+        else if contains -- -f \$argv
+            for f in \$argv[2..-1]
+                if test \"\$f\" = \"forward-char\"
+                    set -g recorded_diff (math \$recorded_diff + 1)
+                end
+            end
+            builtin commandline \$argv
+        else
+            builtin commandline \$argv
+        end
+    end
+    __fish_helix_textobject i '\"'
+    set -l sel_end (math \$recorded_C + \$recorded_diff)
+    string sub -s (math \$recorded_C + 1) -l (math \$sel_end - \$recorded_C + 1) -- (builtin commandline -b)
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_mi_sel" "test" "mi\" selects strictly inside quotes without closing delimiter"
+
+# Interactive textobject selection: ma" on 'ls -ltra "test"'
+set -l test_ma_sel (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'ls -ltra \"test\"'
+    commandline -C 11
+    set -g recorded_C
+    set -g recorded_diff 0
+    function commandline
+        if test (count \$argv) -ge 2; and test \"\$argv[1]\" = \"-C\"
+            set -g recorded_C \$argv[2]
+            builtin commandline \$argv
+        else if contains -- -f \$argv
+            for f in \$argv[2..-1]
+                if test \"\$f\" = \"forward-char\"
+                    set -g recorded_diff (math \$recorded_diff + 1)
+                end
+            end
+            builtin commandline \$argv
+        else
+            builtin commandline \$argv
+        end
+    end
+    __fish_helix_textobject a '\"'
+    set -l sel_end (math \$recorded_C + \$recorded_diff)
+    string sub -s (math \$recorded_C + 1) -l (math \$sel_end - \$recorded_C + 1) -- (builtin commandline -b)
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_ma_sel" '"test"' "ma\" selects around quotes including delimiters but no trailing char"
+
+# Interactive textobject selection: mi" on empty quotes '""'
+set -l test_empty_mode (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'ls \"\"'
+    commandline -C 4
+    __fish_helix_textobject i '\"'
+    echo \$fish_bind_mode
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_empty_mode" "default" "mi\" on empty quotes stays in default mode without invalid selection"
+
+# Interactive word motion: w on 'git commit -m' from 4 ('c')
+set -l test_w_raw (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'git commit -m'
+    commandline -C 4
+    set -g recorded_C
+    set -g recorded_diff 0
+    function commandline
+        if test (count \$argv) -ge 2; and test \"\$argv[1]\" = \"-C\"
+            set -g recorded_C \$argv[2]
+            builtin commandline \$argv
+        else if contains -- -f \$argv
+            for f in \$argv[2..-1]
+                if test \"\$f\" = \"forward-char\"
+                    set -g recorded_diff (math \$recorded_diff + 1)
+                end
+            end
+            builtin commandline \$argv
+        else
+            builtin commandline \$argv
+        end
+    end
+    __fish_helix_normal_w
+    set -l sel_end (math \$recorded_C + \$recorded_diff)
+    echo \"RESULT:\"(string sub -s (math \$recorded_C + 1) -l (math \$sel_end - \$recorded_C + 1) -- (builtin commandline -b))
+" 2>&1)
+set -l test_w_match (string match -r '^RESULT:(.*)' -- $test_w_raw)
+set -l test_w_sel "$test_w_match[2]"
+assert_equal "$test_w_sel" "commit " "w selects word and trailing space without capturing next word"
+
+# Interactive word motion: b on 'git commit -m' from 4 ('c' at word start)
+set -l test_b_raw (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'git commit -m'
+    commandline -C 4
+    set -g recorded_C
+    set -g recorded_diff 0
+    function commandline
+        if test (count \$argv) -ge 2; and test \"\$argv[1]\" = \"-C\"
+            set -g recorded_C \$argv[2]
+            builtin commandline \$argv
+        else if contains -- -f \$argv
+            for f in \$argv[2..-1]
+                if test \"\$f\" = \"backward-char\"
+                    set -g recorded_diff (math \$recorded_diff + 1)
+                end
+            end
+            builtin commandline \$argv
+        else
+            builtin commandline \$argv
+        end
+    end
+    __fish_helix_normal_b
+    set -l sel_start (math \$recorded_C - \$recorded_diff)
+    echo \"RESULT:\"(string sub -s (math \$sel_start + 1) -l (math \$recorded_C - \$sel_start + 1) -- (builtin commandline -b))
+" 2>&1)
+set -l test_b_match (string match -r '^RESULT:(.*)' -- $test_b_raw)
+set -l test_b_start_sel "$test_b_match[2]"
+assert_equal "$test_b_start_sel" "git " "b from word start excludes current word first character"
+
+# Interactive word motion: b on 'git commit -m' from 7 ('m' within word)
+set -l test_b_mid_raw (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'git commit -m'
+    commandline -C 7
+    set -g recorded_C
+    set -g recorded_diff 0
+    function commandline
+        if test (count \$argv) -ge 2; and test \"\$argv[1]\" = \"-C\"
+            set -g recorded_C \$argv[2]
+            builtin commandline \$argv
+        else if contains -- -f \$argv
+            for f in \$argv[2..-1]
+                if test \"\$f\" = \"backward-char\"
+                    set -g recorded_diff (math \$recorded_diff + 1)
+                end
+            end
+            builtin commandline \$argv
+        else
+            builtin commandline \$argv
+        end
+    end
+    __fish_helix_normal_b
+    set -l sel_start (math \$recorded_C - \$recorded_diff)
+    echo \"RESULT:\"(string sub -s (math \$sel_start + 1) -l (math \$recorded_C - \$sel_start + 1) -- (builtin commandline -b))
+" 2>&1)
+set -l test_b_mid_match (string match -r '^RESULT:(.*)' -- $test_b_mid_raw)
+set -l test_b_mid_sel "$test_b_mid_match[2]"
+assert_equal "$test_b_mid_sel" "comm" "b from within word selects back to current word start"
+
+# Interactive consecutive normal mode w on 'ls -ltra "test"'
+set -l test_consec_w_raw (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'ls -ltra \"test\"'
+    commandline -C 0
+
+    set -g cur_pos 0
+    set -g sel_start -1
+    set -g sel_end -1
+    set -g in_sel 0
+
+    function commandline
+        if test (count \$argv) -ge 2; and test \"\$argv[1]\" = \"-C\"
+            set -g cur_pos \$argv[2]
+            if test \$in_sel -eq 0
+                set -g sel_start \$cur_pos
+                set -g sel_end \$cur_pos
+            end
+        else if contains -- -f \$argv
+            for f in \$argv[2..-1]
+                if test \"\$f\" = \"begin-selection\"
+                    set -g in_sel 1
+                    set -g sel_start \$cur_pos
+                    set -g sel_end \$cur_pos
+                else if test \"\$f\" = \"end-selection\"
+                    set -g in_sel 0
+                    set -g sel_start -1
+                    set -g sel_end -1
+                else if test \"\$f\" = \"forward-char\"
+                    set -g cur_pos (math \$cur_pos + 1)
+                    if test \$in_sel -eq 1
+                        set -g sel_end \$cur_pos
+                    end
+                end
+            end
+        else if contains -- -C \$argv
+            echo \$cur_pos
+        else if contains -- -b \$argv
+            echo 'ls -ltra \"test\"'
+        else if contains -- -s \$argv
+            if test \$in_sel -eq 1
+                set -l min_p (math \"min(\$sel_start, \$cur_pos)\")
+                set -l max_p (math \"max(\$sel_start, \$cur_pos)\")
+                string sub -s (math \$min_p + 1) -l (math \$max_p - \$min_p + 1) -- 'ls -ltra \"test\"'
+            end
+        else if contains -- --selection-start \$argv
+            if test \$in_sel -eq 1
+                math \"min(\$sel_start, \$cur_pos)\"
+                return 0
+            end
+            return 1
+        else if contains -- --selection-end \$argv
+            if test \$in_sel -eq 1
+                math \"max(\$sel_start, \$cur_pos) + 1\"
+                return 0
+            end
+            return 1
+        end
+    end
+
+    __fish_helix_normal_w
+    set -l sel1 (commandline -s)
+    set -l mode1 \$fish_bind_mode
+
+    __fish_helix_normal_w
+    set -l sel2 (commandline -s)
+    set -l mode2 \$fish_bind_mode
+
+    __fish_helix_normal_w
+    set -l sel3 (commandline -s)
+    set -l mode3 \$fish_bind_mode
+
+    __fish_helix_normal_w
+    set -l sel4 (commandline -s)
+
+    __fish_helix_normal_w
+    set -l sel5 (commandline -s)
+
+    __fish_helix_normal_w
+    set -l sel6 (commandline -s)
+
+    echo \"P1:\$sel1|M1:\$mode1|P2:\$sel2|M2:\$mode2|P3:\$sel3|M3:\$mode3|P4:\$sel4|P5:\$sel5|P6:\$sel6\"
+" 2>&1)
+set -l match_consec (string match -r 'P1:(.*)\|M1:(.*)\|P2:(.*)\|M2:(.*)\|P3:(.*)\|M3:(.*)\|P4:(.*)\|P5:(.*)\|P6:(.*)' -- $test_consec_w_raw)
+assert_equal "$match_consec[2]" "ls " "Consecutive w press 1 selects 'ls '"
+assert_equal "$match_consec[3]" "default" "Consecutive w press 1 keeps default mode"
+assert_equal "$match_consec[4]" "-" "Consecutive w press 2 selects '-' as its own word"
+assert_equal "$match_consec[5]" "default" "Consecutive w press 2 keeps default mode"
+assert_equal "$match_consec[6]" "ltra " "Consecutive w press 3 selects 'ltra '"
+assert_equal "$match_consec[7]" "default" "Consecutive w press 3 keeps default mode"
+assert_equal "$match_consec[8]" '"' "Consecutive w press 4 selects '\"' as its own word"
+assert_equal "$match_consec[9]" "test" "Consecutive w press 5 selects 'test'"
+assert_equal "$match_consec[10]" '"' "Consecutive w press 6 selects '\"'"
+
+# Interactive consecutive normal mode w on 'git commit -m "test"'
+set -l test_consec_w_git_raw (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'git commit -m \"test\"'
+    commandline -C 0
+
+    set -g cur_pos 0
+    set -g sel_start -1
+    set -g sel_end -1
+    set -g in_sel 0
+
+    function commandline
+        if test (count \$argv) -ge 2; and test \"\$argv[1]\" = \"-C\"
+            set -g cur_pos \$argv[2]
+            if test \$in_sel -eq 0
+                set -g sel_start \$cur_pos
+                set -g sel_end \$cur_pos
+            end
+        else if contains -- -f \$argv
+            for f in \$argv[2..-1]
+                if test \"\$f\" = \"begin-selection\"
+                    set -g in_sel 1
+                    set -g sel_start \$cur_pos
+                    set -g sel_end \$cur_pos
+                else if test \"\$f\" = \"end-selection\"
+                    set -g in_sel 0
+                    set -g sel_start -1
+                    set -g sel_end -1
+                else if test \"\$f\" = \"forward-char\"
+                    set -g cur_pos (math \$cur_pos + 1)
+                    if test \$in_sel -eq 1
+                        set -g sel_end \$cur_pos
+                    end
+                end
+            end
+        else if contains -- -C \$argv
+            echo \$cur_pos
+        else if contains -- -b \$argv
+            echo 'git commit -m \"test\"'
+        else if contains -- -s \$argv
+            if test \$in_sel -eq 1
+                set -l min_p (math \"min(\$sel_start, \$cur_pos)\")
+                set -l max_p (math \"max(\$sel_start, \$cur_pos)\")
+                string sub -s (math \$min_p + 1) -l (math \$max_p - \$min_p + 1) -- 'git commit -m \"test\"'
+            end
+        else if contains -- --selection-start \$argv
+            if test \$in_sel -eq 1
+                math \"min(\$sel_start, \$cur_pos)\"
+                return 0
+            end
+            return 1
+        else if contains -- --selection-end \$argv
+            if test \$in_sel -eq 1
+                math \"max(\$sel_start, \$cur_pos) + 1\"
+                return 0
+            end
+            return 1
+        end
+    end
+
+    __fish_helix_normal_w
+    set -l sel1 (commandline -s)
+
+    __fish_helix_normal_w
+    set -l sel2 (commandline -s)
+
+    __fish_helix_normal_w
+    set -l sel3 (commandline -s)
+
+    __fish_helix_normal_w
+    set -l sel4 (commandline -s)
+
+    __fish_helix_normal_w
+    set -l sel5 (commandline -s)
+
+    __fish_helix_normal_w
+    set -l sel6 (commandline -s)
+
+    __fish_helix_normal_w
+    set -l sel7 (commandline -s)
+
+    echo \"P1:\$sel1|P2:\$sel2|P3:\$sel3|P4:\$sel4|P5:\$sel5|P6:\$sel6|P7:\$sel7\"
+" 2>&1)
+set -l match_consec_git (string match -r 'P1:(.*)\|P2:(.*)\|P3:(.*)\|P4:(.*)\|P5:(.*)\|P6:(.*)\|P7:(.*)' -- $test_consec_w_git_raw)
+assert_equal "$match_consec_git[2]" "git " "git consecutive w press 1 selects 'git '"
+assert_equal "$match_consec_git[3]" "commit " "git consecutive w press 2 selects 'commit '"
+assert_equal "$match_consec_git[4]" "-" "git consecutive w press 3 selects '-' as its own word"
+assert_equal "$match_consec_git[5]" "m " "git consecutive w press 4 selects 'm '"
+assert_equal "$match_consec_git[6]" '"' "git consecutive w press 5 selects '\"'"
+assert_equal "$match_consec_git[7]" "test" "git consecutive w press 6 selects 'test'"
+assert_equal "$match_consec_git[8]" '"' "git consecutive w press 7 selects closing '\"'"
+
+# Interactive consecutive normal mode W (BIGWORD) on 'ls -ltra "test"'
+set -l test_consec_W_raw (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'ls -ltra \"test\"'
+    commandline -C 0
+
+    set -g cur_pos 0
+    set -g sel_start -1
+    set -g sel_end -1
+    set -g in_sel 0
+
+    function commandline
+        if test (count \$argv) -ge 2; and test \"\$argv[1]\" = \"-C\"
+            set -g cur_pos \$argv[2]
+            if test \$in_sel -eq 0
+                set -g sel_start \$cur_pos
+                set -g sel_end \$cur_pos
+            end
+        else if contains -- -f \$argv
+            for f in \$argv[2..-1]
+                if test \"\$f\" = \"begin-selection\"
+                    set -g in_sel 1
+                    set -g sel_start \$cur_pos
+                    set -g sel_end \$cur_pos
+                else if test \"\$f\" = \"end-selection\"
+                    set -g in_sel 0
+                    set -g sel_start -1
+                    set -g sel_end -1
+                else if test \"\$f\" = \"forward-char\"
+                    set -g cur_pos (math \$cur_pos + 1)
+                    if test \$in_sel -eq 1
+                        set -g sel_end \$cur_pos
+                    end
+                end
+            end
+        else if contains -- -C \$argv
+            echo \$cur_pos
+        else if contains -- -b \$argv
+            echo 'ls -ltra \"test\"'
+        else if contains -- -s \$argv
+            if test \$in_sel -eq 1
+                set -l min_p (math \"min(\$sel_start, \$cur_pos)\")
+                set -l max_p (math \"max(\$sel_start, \$cur_pos)\")
+                string sub -s (math \$min_p + 1) -l (math \$max_p - \$min_p + 1) -- 'ls -ltra \"test\"'
+            end
+        else if contains -- --selection-start \$argv
+            if test \$in_sel -eq 1
+                math \"min(\$sel_start, \$cur_pos)\"
+                return 0
+            end
+            return 1
+        else if contains -- --selection-end \$argv
+            if test \$in_sel -eq 1
+                math \"max(\$sel_start, \$cur_pos) + 1\"
+                return 0
+            end
+            return 1
+        end
+    end
+
+    __fish_helix_normal_W
+    set -l sel1 (commandline -s)
+
+    __fish_helix_normal_W
+    set -l sel2 (commandline -s)
+
+    __fish_helix_normal_W
+    set -l sel3 (commandline -s)
+
+    echo \"W1:\$sel1|W2:\$sel2|W3:\$sel3\"
+" 2>&1)
+set -l match_consec_W (string match -r 'W1:(.*)\|W2:(.*)\|W3:(.*)' -- $test_consec_W_raw)
+assert_equal "$match_consec_W[2]" "ls " "Consecutive W press 1 selects 'ls '"
+assert_equal "$match_consec_W[3]" "-ltra " "Consecutive W press 2 considers hyphen part of BIGWORD '-ltra '"
+assert_equal "$match_consec_W[4]" '"test"' "Consecutive W press 3 considers quotes part of BIGWORD '\"test\"'"
+
+# Interactive normal mode w on 'FOO_BAR=baz'
+set -l test_env_w_raw (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'FOO_BAR=baz'
+    commandline -C 0
+
+    set -g cur_pos 0
+    set -g sel_start -1
+    set -g sel_end -1
+    set -g in_sel 0
+
+    function commandline
+        if test (count \$argv) -ge 2; and test \"\$argv[1]\" = \"-C\"
+            set -g cur_pos \$argv[2]
+            if test \$in_sel -eq 0
+                set -g sel_start \$cur_pos
+                set -g sel_end \$cur_pos
+            end
+        else if contains -- -f \$argv
+            for f in \$argv[2..-1]
+                if test \"\$f\" = \"begin-selection\"
+                    set -g in_sel 1
+                    set -g sel_start \$cur_pos
+                    set -g sel_end \$cur_pos
+                else if test \"\$f\" = \"end-selection\"
+                    set -g in_sel 0
+                    set -g sel_start -1
+                    set -g sel_end -1
+                else if test \"\$f\" = \"forward-char\"
+                    set -g cur_pos (math \$cur_pos + 1)
+                    if test \$in_sel -eq 1
+                        set -g sel_end \$cur_pos
+                    end
+                end
+            end
+        else if contains -- -C \$argv
+            echo \$cur_pos
+        else if contains -- -b \$argv
+            echo 'FOO_BAR=baz'
+        else if contains -- -s \$argv
+            if test \$in_sel -eq 1
+                set -l min_p (math \"min(\$sel_start, \$cur_pos)\")
+                set -l max_p (math \"max(\$sel_start, \$cur_pos)\")
+                string sub -s (math \$min_p + 1) -l (math \$max_p - \$min_p + 1) -- 'FOO_BAR=baz'
+            end
+        else if contains -- --selection-start \$argv
+            if test \$in_sel -eq 1
+                math \"min(\$sel_start, \$cur_pos)\"
+                return 0
+            end
+            return 1
+        else if contains -- --selection-end \$argv
+            if test \$in_sel -eq 1
+                math \"max(\$sel_start, \$cur_pos) + 1\"
+                return 0
+            end
+            return 1
+        end
+    end
+
+    __fish_helix_normal_w
+    set -l sel1 (commandline -s)
+
+    __fish_helix_normal_w
+    set -l sel2 (commandline -s)
+
+    __fish_helix_normal_w
+    set -l sel3 (commandline -s)
+
+    echo \"E1:\$sel1|E2:\$sel2|E3:\$sel3\"
+" 2>&1)
+set -l match_env_w (string match -r 'E1:(.*)\|E2:(.*)\|E3:(.*)' -- $test_env_w_raw)
+assert_equal "$match_env_w[2]" "FOO_BAR" "w considers underscore part of word 'FOO_BAR'"
+assert_equal "$match_env_w[3]" "=" "w considers '=' its own word"
+assert_equal "$match_env_w[4]" "baz" "w selects 'baz'"
+
+# Interactive visual mode w extends selection
+set -l test_vis_w_raw (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r -- 'ls -ltra \"test\"'
+    commandline -C 0
+
+    set -g cur_pos 0
+    set -g sel_start -1
+    set -g sel_end -1
+    set -g in_sel 0
+
+    function commandline
+        if test (count \$argv) -ge 2; and test \"\$argv[1]\" = \"-C\"
+            set -g cur_pos \$argv[2]
+            if test \$in_sel -eq 0
+                set -g sel_start \$cur_pos
+                set -g sel_end \$cur_pos
+            end
+        else if contains -- -f \$argv
+            for f in \$argv[2..-1]
+                if test \"\$f\" = \"begin-selection\"
+                    set -g in_sel 1
+                    set -g sel_start \$cur_pos
+                    set -g sel_end \$cur_pos
+                else if test \"\$f\" = \"end-selection\"
+                    set -g in_sel 0
+                    set -g sel_start -1
+                    set -g sel_end -1
+                else if test \"\$f\" = \"forward-char\"
+                    set -g cur_pos (math \$cur_pos + 1)
+                    if test \$in_sel -eq 1
+                        set -g sel_end \$cur_pos
+                    end
+                end
+            end
+        else if contains -- -C \$argv
+            echo \$cur_pos
+        else if contains -- -b \$argv
+            echo 'ls -ltra \"test\"'
+        end
+    end
+
+    set fish_bind_mode visual
+    commandline -f begin-selection
+    __fish_helix_visual_w
+    set -l sel1 (string sub -s (math \$sel_start + 1) -l (math \$sel_end - \$sel_start + 1) -- 'ls -ltra \"test\"')
+    set -l mode1 \$fish_bind_mode
+
+    __fish_helix_visual_w
+    set -l sel2 (string sub -s (math \$sel_start + 1) -l (math \$sel_end - \$sel_start + 1) -- 'ls -ltra \"test\"')
+    set -l mode2 \$fish_bind_mode
+
+    __fish_helix_visual_w
+    set -l sel3 (string sub -s (math \$sel_start + 1) -l (math \$sel_end - \$sel_start + 1) -- 'ls -ltra \"test\"')
+
+    echo \"V1:\$sel1|M1:\$mode1|V2:\$sel2|M2:\$mode2|V3:\$sel3\"
+" 2>&1)
+set -l match_vis (string match -r 'V1:(.*)\|M1:(.*)\|V2:(.*)\|M2:(.*)\|V3:(.*)' -- $test_vis_w_raw)
+assert_equal "$match_vis[2]" "ls " "Visual mode w press 1 selects 'ls '"
+assert_equal "$match_vis[3]" "visual" "Visual mode w press 1 maintains visual mode"
+assert_equal "$match_vis[4]" "ls -" "Visual mode w press 2 extends selection across hyphen 'ls -'"
+assert_equal "$match_vis[5]" "visual" "Visual mode w press 2 maintains visual mode"
+assert_equal "$match_vis[6]" "ls -ltra " "Visual mode w press 3 extends selection across 'ls -ltra '"
 
 echo
 echo "================================================="

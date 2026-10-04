@@ -130,8 +130,7 @@ function __fish_helix_surround_add --argument-names char
         set -l start (commandline --selection-start)
         set -l end (commandline --selection-end)
         set -l min_pos (math "min($start, $end)")
-        set -l max_pos (math "max($start, $end)")
-        set -l len (math "$max_pos - $min_pos")
+        set -l len (string length -- "$sel")
 
         commandline -f end-selection
         commandline -C $min_pos
@@ -147,8 +146,7 @@ function __fish_helix_surround_add --argument-names char
         set -l start (commandline --selection-start)
         set -l end (commandline --selection-end)
         set -l min_pos (math "min($start, $end)")
-        set -l max_pos (math "max($start, $end)")
-        set -l len (math "$max_pos - $min_pos")
+        set -l len (string length -- "$sel")
 
         commandline -f end-selection
         commandline -C $min_pos
@@ -209,14 +207,7 @@ function __fish_helix_surround_delete --argument-names char
     set fish_bind_mode default
 end
 
-function __fish_helix_surround_save_old --argument-names char
-    set -g __fish_helix_surround_old "$char"
-end
-
-function __fish_helix_surround_replace --argument-names new_char
-    set -l old_char "$__fish_helix_surround_old"
-    set -g __fish_helix_surround_old ""
-
+function __fish_helix_surround_replace_direct --argument-names old_char new_char
     set -l buf (commandline -b)
     set -l cursor (commandline -C)
     set -l len (string length -- "$buf")
@@ -252,4 +243,14 @@ function __fish_helix_surround_replace --argument-names new_char
     commandline -C $cursor
     commandline -f repaint-mode
     set fish_bind_mode default
+end
+
+function __fish_helix_surround_save_old --argument-names char
+    set -g __fish_helix_surround_old "$char"
+end
+
+function __fish_helix_surround_replace --argument-names new_char
+    set -l old_char "$__fish_helix_surround_old"
+    set -g __fish_helix_surround_old ""
+    __fish_helix_surround_replace_direct "$old_char" "$new_char"
 end

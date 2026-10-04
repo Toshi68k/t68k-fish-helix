@@ -24,12 +24,12 @@ function fish_helix_mode_prompt --description 'Helix-style modal indicator for p
         case helix_replace_one
             set_color --bold bryellow
             printf $fish_helix_mode_prompt_format 'REP'
-        case helix_surround_add helix_surround_del helix_surround_rep1 helix_surround_rep2
+        case helix_surround_add helix_surround_delete helix_surround_replace_old helix_surround_replace_new helix_textobject_inside helix_textobject_around helix_surround_del helix_surround_rep1 helix_surround_rep2
             set_color --bold brcyan
             printf $fish_helix_mode_prompt_format 'MAT'
         case '*'
-            set_color --bold white
-            printf $fish_helix_mode_prompt_format '???'
+            set_color --bold brblue
+            printf $fish_helix_mode_prompt_format 'NOR'
     end
     set_color normal
     echo -n ' '
