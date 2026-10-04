@@ -143,6 +143,7 @@ Actions execute immediately on whatever is currently selected:
 | `Ctrl+w` / `Alt+Backspace`| `delete_word_backward` | Delete previous word backward (`backward-kill-word`) |
 | `Ctrl+u` | `kill_to_line_start` | Delete from cursor to beginning of line |
 | `Ctrl+k` | `kill_to_line_end` | Delete from cursor to end of line |
+| `Ctrl+x Ctrl+e` | `edit_command_buffer` | Open command buffer in external editor (`$EDITOR` / `hx`) |
 | `Tab` | `complete` | Trigger completion / autosuggestion |
 | `Enter` | `execute` | Execute command line |
 
@@ -203,6 +204,8 @@ Actions execute immediately on whatever is currently selected:
 | `<space>y` | Yank selection to system clipboard (`fish_clipboard_copy`) |
 | `<space>p` | Paste from system clipboard after cursor (`fish_clipboard_paste`) |
 | `<space>P` | Paste from system clipboard before cursor |
+| `<space>R` | Replace active selection (or char under cursor) with system clipboard contents |
+| `<space>e` | Open command line in external editor (`$EDITOR` / `hx` via `edit_command_buffer`) |
 | `<space>f` | Search completions and files (`complete-and-search`) |
 | `<space>b` | Open interactive command history pager (`history-pager`) |
 | `<space>c` | Toggle comment prefix on command line (`#`) |
