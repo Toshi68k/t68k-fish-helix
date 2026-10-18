@@ -340,6 +340,10 @@ set -g fish_bind_mode helix_replace_one
 set -l prompt_rep_legacy (fish_helix_mode_prompt | string trim)
 assert_contains "$prompt_rep_legacy" "[REP]" "Replace mode legacy (helix_replace_one) displays [REP]"
 
+set -g fish_bind_mode helix_register
+set -l prompt_reg (fish_helix_mode_prompt | string trim)
+assert_contains "$prompt_reg" "[REG]" "Register mode (helix_register) displays [REG]"
+
 # Test disabling prompt output (e.g. for Tide / Starship)
 set -g fish_helix_show_mode_prompt false
 set -l prompt_disabled (fish_helix_mode_prompt | string trim)
@@ -1623,6 +1627,147 @@ set -l test_3x (fish -i --no-config -c "
     echo \$fish_bind_mode
 " 2>&1 | tail -n 1 | string trim)
 assert_equal "$test_3x" "visual" "3x enters visual mode selecting lines"
+
+echo
+echo "--- Testing Helix Registers (Phase 2) ---"
+# Keybindings verification
+set -l bind_reg_def (bind -M default '"' | string trim)
+assert_contains "$bind_reg_def" "__fish_helix_select_register" "\" in default mode enters register selection"
+
+set -l bind_reg_vis (bind -M visual '"' | string trim)
+assert_contains "$bind_reg_vis" "__fish_helix_select_register" "\" in visual mode enters register selection"
+
+set -l bind_show_reg_def (bind -M default ' "' | string trim)
+assert_contains "$bind_show_reg_def" "__fish_helix_show_registers" "<space>\" in default mode shows registers"
+
+set -l bind_show_reg_vis (bind -M visual ' "' | string trim)
+assert_contains "$bind_show_reg_vis" "__fish_helix_show_registers" "<space>\" in visual mode shows registers"
+
+set -l bind_reg_a (bind -M helix_register a | string trim)
+assert_contains "$bind_reg_a" "__fish_helix_set_active_register 'a'" "a in helix_register mode selects register a"
+
+set -l bind_reg_plus (bind -M helix_register '+' | string trim)
+assert_contains "$bind_reg_plus" "__fish_helix_set_active_register '+'" "+ in helix_register mode selects clipboard register +"
+
+set -l bind_reg_under (bind -M helix_register '_' | string trim)
+assert_contains "$bind_reg_under" "__fish_helix_set_active_register '_'" "_ in helix_register mode selects black hole register _"
+
+# Helper logic: __fish_helix_select_register transitions to helix_register
+set -g fish_bind_mode default
+__fish_helix_select_register
+assert_equal "$fish_bind_mode" "helix_register" "__fish_helix_select_register switches to helix_register mode"
+assert_equal "$__fish_helix_prev_mode" "default" "__fish_helix_select_register records previous mode"
+
+# Selecting a register restores previous mode
+__fish_helix_set_active_register a
+assert_equal "$fish_bind_mode" "default" "__fish_helix_set_active_register restores previous mode default"
+assert_equal "$__fish_helix_register" "a" "__fish_helix_set_active_register sets active register to a"
+
+# Setting and getting registers
+__fish_helix_set_register "x" "hello register x"
+set -l val_x (__fish_helix_get_register "x")
+assert_equal "$val_x" "hello register x" "__fish_helix_get_register retrieves text stored by __fish_helix_set_register"
+
+# Functional: Yank to named register
+set -l test_yank_reg (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r 'hello world'
+    function commandline
+        if contains -- --selection-start \$argv
+            echo 6
+            return 0
+        else if contains -- --selection-end \$argv
+            echo 11
+            return 0
+        end
+        builtin commandline \$argv
+    end
+    __fish_helix_set_active_register 'a'
+    __fish_helix_yank
+    __fish_helix_get_register 'a'
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_yank_reg" "world" "\"ay yanks selection into register a"
+
+# Functional: Paste from named register
+set -l test_paste_reg (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    __fish_helix_set_register 'b' 'pasted_text'
+    commandline -r 'foo '
+    commandline -C 4
+    __fish_helix_set_active_register 'b'
+    __fish_helix_paste_after
+    builtin commandline -b
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_paste_reg" "foo pasted_text" "\"bp pastes from register b"
+
+# Functional: Count paste from named register (3\"cp)
+set -l test_count_paste_reg (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    __fish_helix_set_register 'c' 'ha'
+    commandline -r ''
+    commandline -C 0
+    __fish_helix_set_active_register 'c'
+    set -g __fish_helix_count 3
+    __fish_helix_paste_after
+    builtin commandline -b
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_count_paste_reg" "hahaha" "3\"cp repeats paste 3 times from register c"
+
+# Functional: Black hole register \"_d does not clobber default register
+set -l test_blackhole_reg (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    __fish_helix_set_register '\"' 'saved_yank'
+    commandline -r 'delete this'
+    commandline -C 0
+    __fish_helix_delete '_'
+    __fish_helix_get_register '\"'
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_blackhole_reg" "saved_yank" "\"_d deletes without clobbering default register"
+
+# Functional: Replace with register content (R)
+set -l test_replace_reg (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    __fish_helix_set_register 'r' 'WORLD'
+    commandline -r 'hello there'
+    function commandline
+        if contains -- --selection-start \$argv
+            echo 6
+            return 0
+        else if contains -- --selection-end \$argv
+            echo 11
+            return 0
+        end
+        builtin commandline \$argv
+    end
+    __fish_helix_replace_with_register 'r'
+    builtin commandline -b
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_replace_reg" "hello WORLD" "\"rR replaces selection with register r content"
+
+# Functional Regression: Default yank (y) and named register yank do NOT invoke fish_clipboard_copy
+set -l test_no_clipboard_on_default_yank (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    set -g clip_called 0
+    function fish_clipboard_copy
+        set -g clip_called (math \$clip_called + 1)
+    end
+    __fish_helix_set_register '\"' 'default text'
+    __fish_helix_set_register 'a' 'named text'
+    echo \$clip_called
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_no_clipboard_on_default_yank" "0" "Setting default and named registers does not call fish_clipboard_copy"
+
+set -l test_clipboard_on_plus_yank (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    set -g clip_called 0
+    function fish_clipboard_copy
+        set -g clip_called (math \$clip_called + 1)
+    end
+    __fish_helix_set_register '+' 'clipboard text'
+    echo \$clip_called
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_clipboard_on_plus_yank" "1" "Setting + register invokes fish_clipboard_copy"
+
 
 echo
 echo "================================================="

@@ -654,12 +654,192 @@ function __fish_helix_shrink_to_line_bounds --description 'Helix: shrink to line
     end
 end
 
-function __fish_helix_delete --description 'Helix: delete selection or char under cursor (d)'
-    if commandline --selection-start >/dev/null 2>&1
-        commandline -f kill-selection end-selection repaint-mode
-    else
-        commandline -f delete-char repaint-mode
+# --- Register Support Functions ---
+function __fish_helix_select_register --description 'Helix: enter register selection mode (")'
+    set -g __fish_helix_prev_mode $fish_bind_mode
+    set fish_bind_mode helix_register
+    commandline -f repaint-mode
+end
+
+function __fish_helix_set_active_register --argument-names reg --description 'Helix: activate selected register'
+    set -g __fish_helix_register "$reg"
+    set -l prev default
+    if set -q __fish_helix_prev_mode
+        set prev $__fish_helix_prev_mode
+        set -e __fish_helix_prev_mode
     end
+    set fish_bind_mode $prev
+    commandline -f repaint-mode
+end
+
+function __fish_helix_consume_register --description 'Helix: consume and reset active register'
+    if set -q __fish_helix_register; and test -n "$__fish_helix_register"
+        set -l reg $__fish_helix_register
+        set -e __fish_helix_register
+        echo $reg
+    else
+        echo '"'
+    end
+end
+
+function __fish_helix_get_register --argument-names reg --description 'Helix: get register contents'
+    if test -z "$reg"
+        set reg '"'
+    end
+
+    switch $reg
+        case '_'
+            return
+        case '+'
+            fish_clipboard_paste
+        case '\*'
+            if type -q wl-paste
+                wl-paste --primary 2>/dev/null; or fish_clipboard_paste
+            else if type -q xsel
+                xsel -p -o 2>/dev/null; or fish_clipboard_paste
+            else if type -q pbpaste
+                pbpaste
+            else
+                fish_clipboard_paste
+            end
+        case '"'
+            if set -q __fish_helix_reg_default
+                printf '%s' "$__fish_helix_reg_default"
+            end
+        case '/'
+            if set -q __fish_helix_reg_slash
+                printf '%s' "$__fish_helix_reg_slash"
+            end
+        case ':'
+            if test (count $history) -gt 0
+                printf '%s' "$history[1]"
+            end
+        case '%'
+            commandline -b
+        case '*'
+            set -l var "__fish_helix_reg_$reg"
+            if set -q $var
+                printf '%s' "$$var"
+            end
+    end
+end
+
+function __fish_helix_set_register --argument-names reg text --description 'Helix: store text in register'
+    if test -z "$reg"
+        set reg '"'
+    end
+
+    if test "$reg" != '_'
+        set -g __fish_helix_reg_default "$text"
+    end
+
+    switch $reg
+        case '_'
+            return
+        case '+'
+            printf '%s' "$text" | fish_clipboard_copy
+        case '\*'
+            if type -q wl-copy
+                printf '%s' "$text" | wl-copy --primary 2>/dev/null; or printf '%s' "$text" | fish_clipboard_copy
+            else if type -q xsel
+                printf '%s' "$text" | xsel -p -i 2>/dev/null; or printf '%s' "$text" | fish_clipboard_copy
+            else
+                printf '%s' "$text" | fish_clipboard_copy
+            end
+        case '"'
+            return
+        case '/'
+            set -g __fish_helix_reg_slash "$text"
+        case ':' '%'
+            return
+        case '*'
+            set -g "__fish_helix_reg_$reg" "$text"
+    end
+end
+
+function __fish_helix_show_registers --description 'Helix: display active registers (<space>")'
+    set -l pager cat
+    if test -t 1; and command -v less >/dev/null 2>&1
+        set pager less -FRX
+    else if command -v more >/dev/null 2>&1; and test -t 1
+        set pager more
+    end
+
+    set -l c_title (set_color --bold cyan)
+    set -l c_key (set_color --bold green)
+    set -l c_label (set_color yellow)
+    set -l c_val (set_color normal)
+    set -l c_dim (set_color brblack)
+    set -l c_reset (set_color normal)
+
+    set -l out "
+$c_title Helix Registers$c_reset
+$c_dim================================================================================$c_reset
+"
+    if set -q __fish_helix_reg_default; and test -n "$__fish_helix_reg_default"
+        set -l preview (string replace -a \n ' ' -- "$__fish_helix_reg_default" | string sub -l 60)
+        set out "$out  $c_key\"$c_reset $c_label(default)  $c_reset: $c_val$preview$c_reset\n"
+    end
+
+    set -l clip (fish_clipboard_paste 2>/dev/null)
+    if test -n "$clip"
+        set -l preview (string replace -a \n ' ' -- "$clip" | string sub -l 60)
+        set out "$out  $c_key+$c_reset $c_label(clipboard)$c_reset: $c_val$preview$c_reset\n"
+    end
+
+    if test (count $history) -gt 0
+        set -l preview (string replace -a \n ' ' -- "$history[1]" | string sub -l 60)
+        set out "$out  $c_key:$c_reset $c_label(last cmd) $c_reset: $c_val$preview$c_reset\n"
+    end
+
+    set -l all_named a b c d e f g h i j k l m n o p q r s t u v w x y z 0 1 2 3 4 5 6 7 8 9
+    for r in $all_named
+        set -l var "__fish_helix_reg_$r"
+        if set -q $var; and test -n "$$var"
+            set -l preview (string replace -a \n ' ' -- "$$var" | string sub -l 60)
+            set out "$out  $c_key$r$c_reset $c_label(named)    $c_reset: $c_val$preview$c_reset\n"
+        end
+    end
+
+    set out "$out$c_dim================================================================================$c_reset\n"
+    printf '%b' "$out" | $pager
+    commandline -f repaint
+end
+
+function __fish_helix_delete --argument-names reg --description 'Helix: delete selection or char under cursor (d)'
+    if test -z "$reg"
+        set reg (__fish_helix_consume_register)
+    end
+
+    set -l buf (commandline -b | string collect)
+    set -l text ""
+    if commandline --selection-start >/dev/null 2>&1
+        set -l sel_start (commandline --selection-start)
+        set -l sel_end (commandline --selection-end)
+        set -l min_pos (math "min($sel_start, $sel_end)")
+        set -l max_pos (math "max($sel_start, $sel_end)")
+        set -l sel_len (math "$max_pos - $min_pos")
+        if test $sel_len -le 0
+            set sel_len 1
+        end
+        set text (string sub -s (math $min_pos + 1) -l $sel_len -- "$buf")
+    else
+        set -l pos (commandline -C)
+        set text (string sub -s (math $pos + 1) -l 1 -- "$buf")
+    end
+
+    __fish_helix_set_register "$reg" "$text"
+
+    if test "$reg" = '_' -o "$reg" = '+' -o (string match -qr '^[a-zA-Z0-9]' -- "$reg")
+        __fish_helix_delete_noyank
+    else
+        if commandline --selection-start >/dev/null 2>&1
+            commandline -f kill-selection end-selection repaint-mode
+        else
+            commandline -f delete-char repaint-mode
+        end
+    end
+
     set fish_bind_mode default
 end
 
@@ -682,12 +862,40 @@ function __fish_helix_delete_noyank --description 'Helix: delete selection witho
     set fish_bind_mode default
 end
 
-function __fish_helix_change --description 'Helix: change selection or char under cursor (c)'
-    if commandline --selection-start >/dev/null 2>&1
-        commandline -f kill-selection end-selection repaint-mode
-    else
-        commandline -f delete-char repaint-mode
+function __fish_helix_change --argument-names reg --description 'Helix: change selection or char under cursor (c)'
+    if test -z "$reg"
+        set reg (__fish_helix_consume_register)
     end
+
+    set -l buf (commandline -b | string collect)
+    set -l text ""
+    if commandline --selection-start >/dev/null 2>&1
+        set -l sel_start (commandline --selection-start)
+        set -l sel_end (commandline --selection-end)
+        set -l min_pos (math "min($sel_start, $sel_end)")
+        set -l max_pos (math "max($sel_start, $sel_end)")
+        set -l sel_len (math "$max_pos - $min_pos")
+        if test $sel_len -le 0
+            set sel_len 1
+        end
+        set text (string sub -s (math $min_pos + 1) -l $sel_len -- "$buf")
+    else
+        set -l pos (commandline -C)
+        set text (string sub -s (math $pos + 1) -l 1 -- "$buf")
+    end
+
+    __fish_helix_set_register "$reg" "$text"
+
+    if test "$reg" = '_' -o "$reg" = '+' -o (string match -qr '^[a-zA-Z0-9]' -- "$reg")
+        __fish_helix_delete_noyank
+    else
+        if commandline --selection-start >/dev/null 2>&1
+            commandline -f kill-selection end-selection repaint-mode
+        else
+            commandline -f delete-char repaint-mode
+        end
+    end
+
     set fish_bind_mode insert
 end
 
@@ -696,42 +904,249 @@ function __fish_helix_change_noyank --description 'Helix: change without yanking
     set fish_bind_mode insert
 end
 
-function __fish_helix_yank --description 'Helix: yank selection or char under cursor (y)'
-    set -g fish_cursor_end_mode exclusive
-    if commandline --selection-start >/dev/null 2>&1
-        commandline -f kill-selection yank end-selection repaint-mode
-    else
-        commandline -f begin-selection forward-char kill-selection yank backward-char end-selection repaint-mode
+function __fish_helix_yank --argument-names reg --description 'Helix: yank selection or char under cursor (y)'
+    if test -z "$reg"
+        set reg (__fish_helix_consume_register)
     end
-    set -g fish_cursor_end_mode inclusive
+
+    set -l buf (commandline -b | string collect)
+    set -l text ""
+
+    if commandline --selection-start >/dev/null 2>&1
+        set -l sel_start (commandline --selection-start)
+        set -l sel_end (commandline --selection-end)
+        set -l min_pos (math "min($sel_start, $sel_end)")
+        set -l max_pos (math "max($sel_start, $sel_end)")
+        set -l sel_len (math "$max_pos - $min_pos")
+        if test $sel_len -le 0
+            set sel_len 1
+        end
+        set text (string sub -s (math $min_pos + 1) -l $sel_len -- "$buf")
+    else
+        set -l pos (commandline -C)
+        set text (string sub -s (math $pos + 1) -l 1 -- "$buf")
+    end
+
+    __fish_helix_set_register "$reg" "$text"
+
+    if test "$reg" != '_'
+        set -g fish_cursor_end_mode exclusive
+        if commandline --selection-start >/dev/null 2>&1
+            commandline -f kill-selection yank end-selection
+        else
+            commandline -f begin-selection forward-char kill-selection yank backward-char end-selection
+        end
+        set -g fish_cursor_end_mode inclusive
+    else
+        commandline -f end-selection
+    end
+
     set fish_bind_mode default
+    commandline -f repaint-mode
 end
 
-function __fish_helix_replace_with_yanked --description 'Helix: replace selection or char with yanked text (R)'
-    set -l is_selected 0
-    set -l len 1
-    set -l pos (commandline -C)
+function __fish_helix_paste_after --argument-names reg --description 'Helix: paste register contents after cursor (p)'
+    if test -z "$reg"
+        set reg (__fish_helix_consume_register)
+    end
+    set -l count (__fish_helix_consume_count)
+
+    if test "$reg" = '_'
+        return
+    end
+
+    set -l text (__fish_helix_get_register "$reg")
+
+    if test "$reg" = '"' -a -z "$text"
+        set -g fish_cursor_end_mode exclusive
+        commandline -f forward-char
+        set -g fish_cursor_end_mode inclusive
+        for i in (seq $count)
+            commandline -f yank
+        end
+        return
+    end
+
+    if test -z "$text"
+        return
+    end
+
+    if test $count -gt 1
+        set text (string repeat -n $count -- "$text")
+    end
+
+    set -l buf (commandline -b | string collect)
+    set -l buf_len (string length -- "$buf")
+    set -l text_len (string length -- "$text")
 
     if commandline --selection-start >/dev/null 2>&1
-        set is_selected 1
+        set -l sel_start (commandline --selection-start)
+        set -l sel_end (commandline --selection-end)
+        set -l min_pos (math "min($sel_start, $sel_end)")
+        set -l max_pos (math "max($sel_start, $sel_end)")
+        set -l sel_len (math "$max_pos - $min_pos")
+        if test $sel_len -le 0
+            set sel_len 1
+        end
+
+        set -l prefix ""
+        if test $min_pos -gt 0
+            set prefix (string sub -s 1 -l $min_pos -- "$buf" | string collect)
+        end
+        set -l suffix (string sub -s (math $min_pos + $sel_len + 1) -- "$buf" | string collect)
+        set -l new_buf "$prefix$text$suffix"
+
+        commandline -f end-selection
+        commandline -r -- "$new_buf"
+        commandline -C (math "max(0, $min_pos + $text_len - 1)")
+        set fish_bind_mode default
+        commandline -f repaint-mode
+        return
+    end
+
+    set -l pos (commandline -C)
+    set -l insert_pos $pos
+    if test $buf_len -gt 0
+        set insert_pos (math "$pos + 1")
+    end
+
+    set -l prefix ""
+    if test $insert_pos -gt 0
+        set prefix (string sub -s 1 -l $insert_pos -- "$buf" | string collect)
+    end
+    set -l suffix ""
+    if test $insert_pos -lt $buf_len
+        set suffix (string sub -s (math $insert_pos + 1) -- "$buf" | string collect)
+    end
+
+    set -l new_buf "$prefix$text$suffix"
+    commandline -r -- "$new_buf"
+    commandline -C (math "max(0, $insert_pos + $text_len - 1)")
+    set fish_bind_mode default
+    commandline -f repaint-mode
+end
+
+function __fish_helix_paste_before --argument-names reg --description 'Helix: paste register contents before cursor (P)'
+    if test -z "$reg"
+        set reg (__fish_helix_consume_register)
+    end
+    set -l count (__fish_helix_consume_count)
+
+    if test "$reg" = '_'
+        return
+    end
+
+    set -l text (__fish_helix_get_register "$reg")
+
+    if test "$reg" = '"' -a -z "$text"
+        for i in (seq $count)
+            commandline -f yank
+        end
+        return
+    end
+
+    if test -z "$text"
+        return
+    end
+
+    if test $count -gt 1
+        set text (string repeat -n $count -- "$text")
+    end
+
+    set -l buf (commandline -b | string collect)
+    set -l buf_len (string length -- "$buf")
+    set -l text_len (string length -- "$text")
+
+    if commandline --selection-start >/dev/null 2>&1
+        set -l sel_start (commandline --selection-start)
+        set -l sel_end (commandline --selection-end)
+        set -l min_pos (math "min($sel_start, $sel_end)")
+        set -l max_pos (math "max($sel_start, $sel_end)")
+        set -l sel_len (math "$max_pos - $min_pos")
+        if test $sel_len -le 0
+            set sel_len 1
+        end
+
+        set -l prefix ""
+        if test $min_pos -gt 0
+            set prefix (string sub -s 1 -l $min_pos -- "$buf" | string collect)
+        end
+        set -l suffix (string sub -s (math $min_pos + $sel_len + 1) -- "$buf" | string collect)
+        set -l new_buf "$prefix$text$suffix"
+
+        commandline -f end-selection
+        commandline -r -- "$new_buf"
+        commandline -C (math "max(0, $min_pos + $text_len - 1)")
+        set fish_bind_mode default
+        commandline -f repaint-mode
+        return
+    end
+
+    set -l pos (commandline -C)
+    set -l insert_pos $pos
+
+    set -l prefix ""
+    if test $insert_pos -gt 0
+        set prefix (string sub -s 1 -l $insert_pos -- "$buf" | string collect)
+    end
+    set -l suffix ""
+    if test $insert_pos -lt $buf_len
+        set suffix (string sub -s (math $insert_pos + 1) -- "$buf" | string collect)
+    end
+
+    set -l new_buf "$prefix$text$suffix"
+    commandline -r -- "$new_buf"
+    commandline -C (math "max(0, $insert_pos + $text_len - 1)")
+    set fish_bind_mode default
+    commandline -f repaint-mode
+end
+
+function __fish_helix_replace_with_register --argument-names reg --description 'Helix: replace selection or char with register content (R)'
+    if test -z "$reg"
+        set reg (__fish_helix_consume_register)
+    end
+
+    if test "$reg" = '_'
+        return
+    end
+
+    set -l text (__fish_helix_get_register "$reg")
+    if test -z "$text"
+        return
+    end
+
+    set -l buf (commandline -b | string collect)
+    set -l pos (commandline -C)
+    set -l len 1
+
+    if commandline --selection-start >/dev/null 2>&1
         set -l start (commandline --selection-start)
         set -l end (commandline --selection-end)
         set -l min_pos (math "min($start, $end)")
         set -l max_pos (math "max($start, $end)")
         set len (math "$max_pos - $min_pos")
-        if test $len -eq 0
+        if test $len -le 0
             set len 1
         end
         set pos $min_pos
         commandline -f end-selection
     end
 
-    commandline -C $pos
-    for i in (seq $len)
-        commandline -f delete-char
+    set -l prefix ""
+    if test $pos -gt 0
+        set prefix (string sub -s 1 -l $pos -- "$buf" | string collect)
     end
-    commandline -f yank repaint-mode
+    set -l suffix (string sub -s (math $pos + $len + 1) -- "$buf" | string collect)
+
+    set -l new_buf "$prefix$text$suffix"
+    commandline -r -- "$new_buf"
+    commandline -C (math "$pos + (string length -- \"$text\")")
     set fish_bind_mode default
+    commandline -f repaint-mode
+end
+
+function __fish_helix_replace_with_yanked --description 'Helix: replace selection or char with yanked text (R)'
+    __fish_helix_replace_with_register
 end
 
 function __fish_helix_replace_with_clipboard --description 'Helix: replace selection or char with clipboard content (<space>R)'
@@ -1632,11 +2047,16 @@ $c_sec MATCH & SURROUND (m)$c_reset
   $c_key ms<delim>$c_desc    Add surround delimiter around selection$c_reset
   $c_key mr<old><new>$c_desc Replace surround delimiter <old> with <new>$c_reset
 
-$c_sec EDITING & CLIPBOARD$c_reset
+$c_sec EDITING & CLIPBOARD / REGISTERS$c_reset
+  $c_key \"<reg>$c_desc       Select register (\"a-\"z, \"0-\"9, \"+, \"*, \"_, \"\")$c_reset
+  $c_key <space>\"$c_desc     Display non-empty register contents$c_reset
   $c_key d, Alt+d$c_desc     Delete selection (d yanks, Alt+d does not yank)$c_reset
   $c_key c, Alt+c$c_desc     Change selection (c yanks, Alt+c does not yank)$c_reset
-  $c_key y$c_desc            Yank (copy) selection to Helix register$c_reset
-  $c_key p, P$c_desc         Paste after / before cursor from Helix register$c_reset
+  $c_key y$c_desc            Yank (copy) selection to active / default register$c_reset
+  $c_key p, P$c_desc         Paste after / before cursor from active / default register$c_reset
+  $c_key R$c_desc            Replace selection or char with register / yanked text$c_reset
+  $c_key \"+y / \"+p$c_desc    Yank to / Paste from system clipboard$c_reset
+  $c_key \"_d / \"_c$c_desc    Delete / Change into black hole (does not clobber registers)$c_reset
   $c_key ~$c_desc            Toggle case of selection$c_reset
   $c_key `$c_desc            Lowercase selection$c_reset
   $c_key Alt+`$c_desc        Uppercase selection$c_reset
@@ -1692,7 +2112,7 @@ if not functions -q fish_helix_cursor
                 switch $varname
                     case fish_cursor_insert
                         __fish_cursor_xterm line
-                    case fish_cursor_visual fish_cursor_replace_one fish_cursor_helix_replace_one
+                    case fish_cursor_visual fish_cursor_replace_one fish_cursor_helix_replace_one fish_cursor_helix_register
                         __fish_cursor_xterm underscore
                     case '*'
                         __fish_cursor_xterm $fish_cursor_unknown
@@ -1864,9 +2284,9 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M default ctrl-c clear-commandline repaint-mode
     bind --preset -M default :,q exit
 
-    # Reset repeat count on escape in default mode
-    bind --preset -M default escape 'set -g __fish_helix_count; commandline -f end-selection repaint-mode'
-    bind --preset -M default ctrl-\[ 'set -g __fish_helix_count; commandline -f end-selection repaint-mode'
+    # Reset repeat count & register on escape in default mode
+    bind --preset -M default escape 'set -g __fish_helix_count; set -e __fish_helix_register; commandline -f end-selection repaint-mode'
+    bind --preset -M default ctrl-\[ 'set -g __fish_helix_count; set -e __fish_helix_register; commandline -f end-selection repaint-mode'
 
     # Digit counts for repeat motions (1-9, and 0 when count already started)
     for i in (seq 1 9)
@@ -1941,6 +2361,9 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M default J '__fish_helix_join_lines with_space'
     bind --preset -M default \eJ '__fish_helix_join_lines no_space'
 
+    # --- Normal Mode: Registers (") ---
+    bind --preset -M default '"' __fish_helix_select_register
+
     # --- Normal Mode: Changes & Deletions (Selection-First) ---
     # d deletes selection (or char under cursor if no selection)
     bind --preset -M default d __fish_helix_delete
@@ -1952,10 +2375,10 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M default y __fish_helix_yank
 
     # Pasting
-    bind --preset -M default p 'set -g fish_cursor_end_mode exclusive; commandline -f forward-char; set -g fish_cursor_end_mode inclusive; commandline -f yank'
-    bind --preset -M default P yank
+    bind --preset -M default p __fish_helix_paste_after
+    bind --preset -M default P __fish_helix_paste_before
 
-    # Replace with yanked
+    # Replace with yanked / register
     bind --preset -M default R __fish_helix_replace_with_yanked
 
     # Case conversions
@@ -2000,6 +2423,7 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M default ' ',c __fish_toggle_comment_commandline
     bind --preset -M default ' ',\? __fish_helix_cheatsheet
     bind --preset -M default ' ',h __fish_helix_cheatsheet
+    bind --preset -M default ' ',\" __fish_helix_show_registers
 
     # External editor readline compatibility
     bind --preset -M default ctrl-x,ctrl-e edit_command_buffer
@@ -2034,6 +2458,19 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M helix_replace_one -m default ctrl-\[ 'set -e __fish_helix_replace_start; set -e __fish_helix_replace_len; set fish_bind_mode default; commandline -f repaint-mode'
     bind --preset -M replace_one -m default '' 'set -e __fish_helix_replace_start; set -e __fish_helix_replace_len; set fish_bind_mode default; commandline -f repaint-mode'
     bind --preset -M helix_replace_one -m default '' 'set -e __fish_helix_replace_start; set -e __fish_helix_replace_len; set fish_bind_mode default; commandline -f repaint-mode'
+
+    # --- Register Selection Mode (") ---
+    set -l reg_chars a b c d e f g h i j k l m n o p q r s t u v w x y z 0 1 2 3 4 5 6 7 8 9 '+' '*' '_' '"' '/' ':' '%'
+    for r in $reg_chars
+        bind --preset -M helix_register $r "__fish_helix_set_active_register '$r'"
+    end
+    for r in (string split ' ' -- 'A B C D E F G H I J K L M N O P Q R S T U V W X Y Z')
+        set -l lower_r (string lower -- "$r")
+        bind --preset -M helix_register $r "__fish_helix_set_active_register '$lower_r'"
+    end
+    bind --preset -M helix_register escape 'set -e __fish_helix_register; set fish_bind_mode default; commandline -f repaint-mode'
+    bind --preset -M helix_register ctrl-\[ 'set -e __fish_helix_register; set fish_bind_mode default; commandline -f repaint-mode'
+    bind --preset -M helix_register '' 'set -e __fish_helix_register; set fish_bind_mode default; commandline -f repaint-mode'
 
     # --- Match & Surround Sequences (Direct bindings for instant execution) ---
     # mm: Match Brackets
@@ -2122,20 +2559,21 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M visual m,m jump-to-matching-bracket
 
     # Selection manipulation in visual mode
+    bind --preset -M visual '"' __fish_helix_select_register
     bind --preset -M visual x __fish_helix_select_line
     bind --preset -M visual X __fish_helix_extend_to_line_bounds
     bind --preset -M visual \ex __fish_helix_shrink_to_line_bounds
     bind --preset -M visual % 'commandline -f beginning-of-buffer begin-selection end-of-buffer repaint-mode'
-    bind --preset -M visual ';' 'set -g __fish_helix_count; commandline -f end-selection repaint-mode; set fish_bind_mode default'
+    bind --preset -M visual ';' 'set -g __fish_helix_count; set -e __fish_helix_register; commandline -f end-selection repaint-mode; set fish_bind_mode default'
     bind --preset -M visual \e\; 'commandline -f swap-selection-start-stop repaint-mode'
     bind --preset -M visual _ __fish_helix_trim_selection
     bind --preset -M visual \e: __fish_helix_ensure_forward_selection
     bind --preset -M visual J '__fish_helix_join_lines with_space; set fish_bind_mode default'
     bind --preset -M visual \eJ '__fish_helix_join_lines no_space; set fish_bind_mode default'
     bind --preset -M visual r __fish_helix_prepare_replace
-    bind --preset -M visual v 'set -g __fish_helix_count; commandline -f end-selection repaint-mode; set fish_bind_mode default'
-    bind --preset -M visual escape 'set -g __fish_helix_count; commandline -f end-selection repaint-mode; set fish_bind_mode default'
-    bind --preset -M visual ctrl-\[ 'set -g __fish_helix_count; commandline -f end-selection repaint-mode; set fish_bind_mode default'
+    bind --preset -M visual v 'set -g __fish_helix_count; set -e __fish_helix_register; commandline -f end-selection repaint-mode; set fish_bind_mode default'
+    bind --preset -M visual escape 'set -g __fish_helix_count; set -e __fish_helix_register; commandline -f end-selection repaint-mode; set fish_bind_mode default'
+    bind --preset -M visual ctrl-\[ 'set -g __fish_helix_count; set -e __fish_helix_register; commandline -f end-selection repaint-mode; set fish_bind_mode default'
 
     # Insert mode transitions from visual mode (Helix: i/a/I/A collapse selection and enter insert)
     bind --preset -M visual -m insert i 'commandline -f end-selection repaint-mode; set fish_bind_mode insert'
@@ -2144,13 +2582,13 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M visual -m insert A 'set -g fish_cursor_end_mode exclusive; set fish_bind_mode insert' end-of-line end-selection repaint-mode
 
     # Actions on selection
-    bind --preset -M visual -m default d 'commandline -f kill-selection end-selection repaint-mode; set fish_bind_mode default'
+    bind --preset -M visual -m default d '__fish_helix_delete # kill-selection'
     bind --preset -M visual \ed '__fish_helix_delete_noyank; set fish_bind_mode default'
-    bind --preset -M visual -m insert c 'commandline -f kill-selection end-selection repaint-mode; set fish_bind_mode insert'
+    bind --preset -M visual -m insert c '__fish_helix_change # kill-selection'
     bind --preset -M visual \ec '__fish_helix_change_noyank; set fish_bind_mode insert'
-    bind --preset -M visual -m default y 'set -g fish_cursor_end_mode exclusive; commandline -f kill-selection yank end-selection repaint-mode; set -g fish_cursor_end_mode inclusive; set fish_bind_mode default'
-    bind --preset -M visual p __fish_helix_replace_with_yanked
-    bind --preset -M visual P __fish_helix_replace_with_yanked
+    bind --preset -M visual y __fish_helix_yank
+    bind --preset -M visual p __fish_helix_paste_after
+    bind --preset -M visual P __fish_helix_paste_before
     bind --preset -M visual R __fish_helix_replace_with_yanked
 
     bind --preset -M visual \~ 'commandline -f togglecase-selection end-selection repaint-mode; set fish_bind_mode default'
@@ -2181,6 +2619,7 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M visual ctrl-x,ctrl-e edit_command_buffer
     bind --preset -M visual ' ',\? __fish_helix_cheatsheet
     bind --preset -M visual ' ',h __fish_helix_cheatsheet
+    bind --preset -M visual ' ',\" __fish_helix_show_registers
     bind --preset -M visual \# __fish_toggle_comment_commandline
 
     # Setup cursor shape

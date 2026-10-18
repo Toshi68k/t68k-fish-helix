@@ -27,7 +27,7 @@ function fish_helix_cursor --description 'Set cursor shape for different Helix m
             switch $varname
                 case fish_cursor_insert
                     __fish_cursor_xterm line
-                case fish_cursor_visual fish_cursor_replace_one fish_cursor_helix_replace_one
+                case fish_cursor_visual fish_cursor_replace_one fish_cursor_helix_replace_one fish_cursor_helix_register
                     __fish_cursor_xterm underscore
                 case '*'
                     __fish_cursor_xterm $fish_cursor_unknown
