@@ -116,14 +116,14 @@ Actions execute immediately on whatever is currently selected:
 
 | Key | Description |
 |---|---|
-| `d` | Delete active selection (or single char under cursor) and copy to kill-ring |
-| `Alt+d` | Delete active selection without touching the kill-ring (`delete_selection_noyank`) |
-| `c` | Delete active selection and switch to `Insert` mode |
-| `Alt+c` | Delete active selection without touching kill-ring and switch to `Insert` mode |
-| `y` | Yank (copy) active selection to kill-ring |
-| `p` | Paste kill-ring after cursor / selection |
-| `P` | Paste kill-ring before cursor / selection |
-| `R` | Replace active selection (or char under cursor) with kill-ring contents without clobbering kill-ring |
+| `d` | Delete active selection (or single char under cursor) to active / default register |
+| `Alt+d` | Delete active selection without touching registers (`delete_selection_noyank`) |
+| `c` | Delete active selection to active / default register and switch to `Insert` mode |
+| `Alt+c` | Delete active selection without touching registers and switch to `Insert` mode |
+| `y` | Yank (copy) active selection to active / default register |
+| `p` | Paste from active / default register after cursor / selection |
+| `P` | Paste from active / default register before cursor / selection |
+| `R` | Replace active selection (or char under cursor) with register contents without clobbering registers |
 | `r<char>` | Replace selected character(s) with `<char>` and stay in `Normal` mode |
 | `~` | Toggle case of selection / character |
 | `` ` `` | Switch selection to lowercase (`downcase-selection`) |
@@ -135,7 +135,34 @@ Actions execute immediately on whatever is currently selected:
 
 ---
 
-### 4. Insert Mode & Readline Shortcuts
+### 4. Helix Registers (`"`)
+
+`t68k-fish-helix` provides full Helix-style register support in both `Normal` and `Select` (visual) modes:
+
+| Key | Action | Description |
+|---|---|---|
+| `"<reg>` | `select_register` | Select register for the next `y`, `d`, `c`, `p`, `P`, or `R` |
+| `<space>"` | `show_registers` | View contents of all non-empty registers |
+
+**Supported Registers:**
+- `""` (or default): Default yank register (backed by fish kill-ring)
+- `"a` – `"z`, `"A` – `"Z`: Named registers
+- `"0` – `"9`: Numbered registers
+- `"+` / `"*`: System clipboard register (copies to / pastes from OS clipboard)
+- `"_`: Black hole register (deletions and changes do not overwrite default register or kill-ring)
+
+**Common Register Workflows:**
+- `"ay` → Yank active selection into named register `a`
+- `"ap` / `"aP` → Paste contents of register `a` after / before cursor
+- `3"ap` → Paste contents of register `a` 3 times
+- `"+y` / `"+p` → Copy to / paste from system clipboard
+- `"_d` / `"_c` → Delete / change without clobbering your clipboard or default yank register
+- `"aR` → Replace active selection with contents of register `a`
+- `<space>"` → Show all active register contents
+
+---
+
+### 5. Insert Mode & Readline Shortcuts
 
 | Key | Action | Description |
 |---|---|---|
@@ -153,7 +180,7 @@ Actions execute immediately on whatever is currently selected:
 
 ---
 
-### 5. Goto Sub-Mode (`g`)
+### 6. Goto Sub-Mode (`g`)
 
 | Key | Description |
 |---|---|
@@ -168,7 +195,7 @@ Actions execute immediately on whatever is currently selected:
 
 ---
 
-### 6. Match & Surround Sub-Mode (`m`)
+### 7. Match & Surround Sub-Mode (`m`)
 
 | Key | Helix Command | Description |
 |---|---|---|
@@ -201,7 +228,7 @@ Actions execute immediately on whatever is currently selected:
 
 ---
 
-### 7. Space Sub-Mode (`<space>`)
+### 8. Space Sub-Mode (`<space>`)
 
 | Key | Description |
 |---|---|
@@ -209,14 +236,16 @@ Actions execute immediately on whatever is currently selected:
 | `<space>p` | Paste from system clipboard after cursor (`fish_clipboard_paste`) |
 | `<space>P` | Paste from system clipboard before cursor |
 | `<space>R` | Replace active selection (or char under cursor) with system clipboard contents |
+| `<space>"` | View all non-empty Helix registers |
 | `<space>e` | Open command line in external editor (`$EDITOR` / `hx` via `edit_command_buffer`) |
 | `<space>f` | Search completions and files (`complete-and-search`) |
 | `<space>b` | Open interactive command history pager (`history-pager`) |
 | `<space>c` | Toggle comment prefix on command line (`#`) |
+| `<space>?` / `<space>h` | Open interactive Helix keybindings cheatsheet |
 
 ---
 
-### 8. Search & History (`/`, `?`, `n`, `N`, `Ctrl-r`)
+### 9. Search & History (`/`, `?`, `n`, `N`, `Ctrl-r`)
 
 Helix search motions are routed through a dynamic history dispatcher with native **[Atuin](https://atuin.sh/)** support:
 
@@ -366,13 +395,15 @@ t68k-fish-helix/
 │   ├── __fish_helix_extend_to_line_bounds.fish        # Line boundary extension ('X')
 │   ├── __fish_helix_goto_first_nonwhitespace.fish     # Jump to first non-whitespace ('gs')
 │   ├── __fish_helix_indent.fish                       # Line indent / unindent ('>', '<')
-│   ├── __fish_helix_replace_with_yanked.fish          # Replace selection with yanked text ('R')
+│   ├── __fish_helix_paste.fish                        # Register-aware paste ('p', 'P')
+│   ├── __fish_helix_register.fish                     # Helix register management ('"')
+│   ├── __fish_helix_replace_with_yanked.fish          # Replace selection with yanked / register text ('R')
 │   ├── __fish_helix_run_count.fish                    # Numeric repetition count engine
 │   ├── __fish_helix_select_line.fish                  # Line select & extend below ('x')
 │   ├── __fish_helix_surround.fish                     # Surround add & pair matching ('ms')
 │   └── __fish_helix_yank.fish                         # Selection-first yank ('y')
 └── tests/
-    └── test_helix_bindings.fish                       # 77 automated unit and regression tests
+    └── test_helix_bindings.fish                       # 252 automated unit and regression tests
 ```
 
 ---

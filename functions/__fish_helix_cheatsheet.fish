@@ -61,11 +61,16 @@ $c_sec MATCH & SURROUND (m)$c_reset
   $c_key ms<delim>$c_desc    Add surround delimiter around selection$c_reset
   $c_key mr<old><new>$c_desc Replace surround delimiter <old> with <new>$c_reset
 
-$c_sec EDITING & CLIPBOARD$c_reset
+$c_sec EDITING & CLIPBOARD / REGISTERS$c_reset
+  $c_key \"<reg>$c_desc       Select register (\"a-\"z, \"0-\"9, \"+, \"*, \"_, \"\")$c_reset
+  $c_key <space>\"$c_desc     Display non-empty register contents$c_reset
   $c_key d, Alt+d$c_desc     Delete selection (d yanks, Alt+d does not yank)$c_reset
   $c_key c, Alt+c$c_desc     Change selection (c yanks, Alt+c does not yank)$c_reset
-  $c_key y$c_desc            Yank (copy) selection to Helix register$c_reset
-  $c_key p, P$c_desc         Paste after / before cursor from Helix register$c_reset
+  $c_key y$c_desc            Yank (copy) selection to active / default register$c_reset
+  $c_key p, P$c_desc         Paste after / before cursor from active / default register$c_reset
+  $c_key R$c_desc            Replace selection or char with register / yanked text$c_reset
+  $c_key \"+y / \"+p$c_desc    Yank to / Paste from system clipboard$c_reset
+  $c_key \"_d / \"_c$c_desc    Delete / Change into black hole (does not clobber registers)$c_reset
   $c_key ~$c_desc            Toggle case of selection$c_reset
   $c_key `$c_desc            Lowercase selection$c_reset
   $c_key Alt+`$c_desc        Uppercase selection$c_reset
