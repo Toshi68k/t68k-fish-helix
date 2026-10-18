@@ -403,7 +403,7 @@ t68k-fish-helix/
 │   ├── __fish_helix_surround.fish                     # Surround add & pair matching ('ms')
 │   └── __fish_helix_yank.fish                         # Selection-first yank ('y')
 └── tests/
-    └── test_helix_bindings.fish                       # 252 automated unit and regression tests
+    └── test_helix_bindings.fish                       # 254 automated unit and regression tests
 ```
 
 ---

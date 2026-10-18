@@ -39,7 +39,7 @@ function __fish_helix_get_register --argument-names reg --description 'Helix: ge
         case '+'
             # System clipboard
             fish_clipboard_paste
-        case '*'
+        case '\*'
             # Primary selection or clipboard fallback
             if type -q wl-paste
                 wl-paste --primary 2>/dev/null; or fish_clipboard_paste
@@ -94,7 +94,7 @@ function __fish_helix_set_register --argument-names reg text --description 'Heli
         case '+'
             # System clipboard
             printf '%s' "$text" | fish_clipboard_copy
-        case '*'
+        case '\*'
             # Primary selection
             if type -q wl-copy
                 printf '%s' "$text" | wl-copy --primary 2>/dev/null; or printf '%s' "$text" | fish_clipboard_copy

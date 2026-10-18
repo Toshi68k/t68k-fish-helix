@@ -1744,6 +1744,30 @@ set -l test_replace_reg (fish -i --no-config -c "
 " 2>&1 | tail -n 1 | string trim)
 assert_equal "$test_replace_reg" "hello WORLD" "\"rR replaces selection with register r content"
 
+# Functional Regression: Default yank (y) and named register yank do NOT invoke fish_clipboard_copy
+set -l test_no_clipboard_on_default_yank (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    set -g clip_called 0
+    function fish_clipboard_copy
+        set -g clip_called (math \$clip_called + 1)
+    end
+    __fish_helix_set_register '\"' 'default text'
+    __fish_helix_set_register 'a' 'named text'
+    echo \$clip_called
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_no_clipboard_on_default_yank" "0" "Setting default and named registers does not call fish_clipboard_copy"
+
+set -l test_clipboard_on_plus_yank (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    set -g clip_called 0
+    function fish_clipboard_copy
+        set -g clip_called (math \$clip_called + 1)
+    end
+    __fish_helix_set_register '+' 'clipboard text'
+    echo \$clip_called
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_clipboard_on_plus_yank" "1" "Setting + register invokes fish_clipboard_copy"
+
 
 echo
 echo "================================================="

@@ -692,7 +692,7 @@ function __fish_helix_get_register --argument-names reg --description 'Helix: ge
             return
         case '+'
             fish_clipboard_paste
-        case '*'
+        case '\*'
             if type -q wl-paste
                 wl-paste --primary 2>/dev/null; or fish_clipboard_paste
             else if type -q xsel
@@ -738,7 +738,7 @@ function __fish_helix_set_register --argument-names reg text --description 'Heli
             return
         case '+'
             printf '%s' "$text" | fish_clipboard_copy
-        case '*'
+        case '\*'
             if type -q wl-copy
                 printf '%s' "$text" | wl-copy --primary 2>/dev/null; or printf '%s' "$text" | fish_clipboard_copy
             else if type -q xsel
