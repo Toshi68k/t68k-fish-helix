@@ -462,6 +462,35 @@ function __fish_helix_visual_B --description 'Helix visual mode: extend selectio
             commandline -f backward-char
         end
     end
+end
+
+function __fish_helix_visual_h --description 'Helix visual mode: extend selection left (h)'
+    __fish_helix_run_count backward-char
+    commandline -f repaint-mode
+end
+
+function __fish_helix_visual_l --description 'Helix visual mode: extend selection right (l)'
+    __fish_helix_run_count forward-char
+    commandline -f repaint-mode
+end
+
+function __fish_helix_visual_k --description 'Helix visual mode: extend selection up (k)'
+    __fish_helix_run_count up-line
+    commandline -f repaint-mode
+end
+
+function __fish_helix_visual_j --description 'Helix visual mode: extend selection down (j)'
+    __fish_helix_run_count down-line
+    commandline -f repaint-mode
+end
+
+function __fish_helix_visual_e --description 'Helix visual mode: extend selection to word end (e)'
+    __fish_helix_run_count forward-word-end
+    commandline -f repaint-mode
+end
+
+function __fish_helix_visual_E --description 'Helix visual mode: extend selection to WORD end (E)'
+    __fish_helix_run_count forward-bigword-end
     commandline -f repaint-mode
 end
 
@@ -520,17 +549,29 @@ function __fish_helix_normal_j --description 'Helix normal mode: collapse select
 end
 
 function __fish_helix_select_line --description 'Helix: select line or extend line below (x)'
+    set -l count (__fish_helix_consume_count)
     set -l is_selected 0
     if commandline --selection-start >/dev/null 2>&1
         set is_selected 1
     end
 
     if test $is_selected -eq 1
-        commandline -f end-of-line forward-char end-of-line repaint-mode
+        # Selection already active: extend line down by count lines
+        for i in (seq $count)
+            commandline -f end-of-line forward-char end-of-line
+        end
     else
-        commandline -f beginning-of-line begin-selection end-of-line repaint-mode
+        # Select current line and extend if count > 1
+        commandline -f beginning-of-line begin-selection end-of-line
+        if test $count -gt 1
+            for i in (seq (math $count - 1))
+                commandline -f end-of-line forward-char end-of-line
+            end
+        end
     end
+
     set fish_bind_mode visual
+    commandline -f repaint-mode
 end
 
 function __fish_helix_extend_to_line_bounds --description 'Helix: extend to line bounds (X)'
@@ -539,6 +580,78 @@ function __fish_helix_extend_to_line_bounds --description 'Helix: extend to line
     end
     commandline -f beginning-of-line swap-selection-start-stop end-of-line repaint-mode
     set fish_bind_mode visual
+end
+
+function __fish_helix_shrink_to_line_bounds --description 'Helix: shrink to line bounds (Alt-x)'
+    if not commandline --selection-start >/dev/null 2>&1
+        return
+    end
+
+    set -l buf (commandline -b | string collect)
+    set -l lines (string split \n -- "$buf")
+    set -l num_lines (count $lines)
+    if test $num_lines -eq 0
+        return
+    end
+
+    set -l sel_start (commandline --selection-start)
+    set -l sel_end (commandline --selection-end)
+    set -l min_pos (math "min($sel_start, $sel_end)")
+    set -l max_pos (math "max($sel_start, $sel_end)")
+
+    set -l line_starts
+    set -l line_ends
+    set -l cur_pos 0
+    for i in (seq $num_lines)
+        set -a line_starts $cur_pos
+        set -l line_len (string length -- "$lines[$i]")
+        set -l end_pos (math "$cur_pos + $line_len")
+        set -a line_ends $end_pos
+        set cur_pos (math "$end_pos + 1")
+    end
+
+    set -l L_start 1
+    for i in (seq $num_lines)
+        if test $min_pos -ge $line_starts[$i]
+            set L_start $i
+        end
+    end
+
+    set -l L_end 1
+    for i in (seq $num_lines)
+        if test $max_pos -ge $line_starts[$i]
+            set L_end $i
+        end
+    end
+
+    set -l shrunk_start_line $L_start
+    if test $min_pos -gt $line_starts[$L_start]
+        set shrunk_start_line (math "$L_start + 1")
+    end
+
+    set -l shrunk_end_line $L_end
+    if test $max_pos -lt $line_ends[$L_end]
+        set shrunk_end_line (math "$L_end - 1")
+    end
+
+    if test $shrunk_start_line -le $shrunk_end_line -a $shrunk_start_line -le $num_lines -a $shrunk_end_line -ge 1
+        set -l new_start $line_starts[$shrunk_start_line]
+        set -l new_end $line_ends[$shrunk_end_line]
+        set -l diff (math "$new_end - $new_start")
+
+        commandline -f end-selection
+        commandline -C $new_start
+        commandline -f begin-selection
+        for i in (seq $diff)
+            commandline -f forward-char
+        end
+        set fish_bind_mode visual
+        commandline -f repaint-mode
+    else
+        commandline -f end-selection
+        set fish_bind_mode default
+        commandline -f repaint-mode
+    end
 end
 
 function __fish_helix_delete --description 'Helix: delete selection or char under cursor (d)'
@@ -673,27 +786,198 @@ function __fish_helix_goto_first_nonwhitespace --description 'Helix: goto first 
 end
 
 function __fish_helix_indent --description 'Helix: indent line or selection (>)'
-    set -l line_no (commandline -L)
-    set -l lines (commandline -b | string split \n)
-    set -l cur_line "$lines[$line_no]"
+    set -l count (__fish_helix_consume_count)
+    set -l indent_spaces (string repeat -n $count -- "    ")
+    set -l indent_len (string length -- "$indent_spaces")
 
-    set lines[$line_no] "    $cur_line"
+    set -l buf (commandline -b | string collect)
+    set -l lines (string split \n -- "$buf")
+    set -l num_lines (count $lines)
+    if test $num_lines -eq 0
+        return
+    end
+
+    set -l is_selected 0
+    set -l start_line 1
+    set -l end_line 1
+    set -l orig_cursor (commandline -C)
+
+    set -l line_starts
+    set -l line_ends
+    set -l cur_pos 0
+    for i in (seq $num_lines)
+        set -a line_starts $cur_pos
+        set -l line_len (string length -- "$lines[$i]")
+        set -l end_pos (math "$cur_pos + $line_len")
+        set -a line_ends $end_pos
+        set cur_pos (math "$end_pos + 1")
+    end
+
+    set -l min_pos 0
+    set -l max_pos 0
+
+    if commandline --selection-start >/dev/null 2>&1
+        set is_selected 1
+        set -l sel_start (commandline --selection-start)
+        set -l sel_end (commandline --selection-end)
+        set min_pos (math "min($sel_start, $sel_end)")
+        set max_pos (math "max($sel_start, $sel_end)")
+
+        for i in (seq $num_lines)
+            if test $min_pos -ge $line_starts[$i]
+                set start_line $i
+            end
+            if test $max_pos -ge $line_starts[$i]
+                set end_line $i
+            end
+        end
+
+        if test $end_line -gt $start_line -a $max_pos -eq $line_starts[$end_line]
+            set end_line (math "$end_line - 1")
+        end
+    else
+        set start_line (commandline -L)
+        if test -z "$start_line" -o $start_line -lt 1
+            set start_line 1
+        end
+        if test $start_line -gt $num_lines
+            set start_line $num_lines
+        end
+        set end_line $start_line
+    end
+
+    for i in (seq $start_line $end_line)
+        set lines[$i] "$indent_spaces$lines[$i]"
+    end
+
     set -l new_buf (string join \n -- $lines)
     commandline -r -- "$new_buf"
+
+    if test $is_selected -eq 1
+        set -l num_indented (math "$end_line - $start_line + 1")
+        set -l total_added (math "$num_indented * $indent_len")
+        set -l new_min $min_pos
+        set -l new_max (math "$max_pos + $total_added")
+
+        commandline -f end-selection
+        commandline -C $new_min
+        commandline -f begin-selection
+        set -l diff (math "$new_max - $new_min")
+        for i in (seq $diff)
+            commandline -f forward-char
+        end
+        set fish_bind_mode visual
+    else
+        commandline -C (math "$orig_cursor + $indent_len")
+        set fish_bind_mode default
+    end
+
     commandline -f repaint-mode
-    set fish_bind_mode default
 end
 
 function __fish_helix_unindent --description 'Helix: unindent line or selection (<)'
-    set -l line_no (commandline -L)
-    set -l lines (commandline -b | string split \n)
-    set -l cur_line "$lines[$line_no]"
+    set -l count (__fish_helix_consume_count)
+    set -l buf (commandline -b | string collect)
+    set -l lines (string split \n -- "$buf")
+    set -l num_lines (count $lines)
+    if test $num_lines -eq 0
+        return
+    end
 
-    set lines[$line_no] (string replace -r '^ {1,4}' '' -- "$cur_line")
+    set -l is_selected 0
+    set -l start_line 1
+    set -l end_line 1
+    set -l orig_cursor (commandline -C)
+
+    set -l line_starts
+    set -l line_ends
+    set -l cur_pos 0
+    for i in (seq $num_lines)
+        set -a line_starts $cur_pos
+        set -l line_len (string length -- "$lines[$i]")
+        set -l end_pos (math "$cur_pos + $line_len")
+        set -a line_ends $end_pos
+        set cur_pos (math "$end_pos + 1")
+    end
+
+    set -l min_pos 0
+    set -l max_pos 0
+
+    if commandline --selection-start >/dev/null 2>&1
+        set is_selected 1
+        set -l sel_start (commandline --selection-start)
+        set -l sel_end (commandline --selection-end)
+        set min_pos (math "min($sel_start, $sel_end)")
+        set max_pos (math "max($sel_start, $sel_end)")
+
+        for i in (seq $num_lines)
+            if test $min_pos -ge $line_starts[$i]
+                set start_line $i
+            end
+            if test $max_pos -ge $line_starts[$i]
+                set end_line $i
+            end
+        end
+
+        if test $end_line -gt $start_line -a $max_pos -eq $line_starts[$end_line]
+            set end_line (math "$end_line - 1")
+        end
+    else
+        set start_line (commandline -L)
+        if test -z "$start_line" -o $start_line -lt 1
+            set start_line 1
+        end
+        if test $start_line -gt $num_lines
+            set start_line $num_lines
+        end
+        set end_line $start_line
+    end
+
+    set -l total_removed 0
+    set -l start_line_removed 0
+
+    for i in (seq $start_line $end_line)
+        set -l cur_line "$lines[$i]"
+        set -l new_line "$cur_line"
+        set -l line_removed 0
+        for c in (seq $count)
+            set -l before_len (string length -- "$new_line")
+            set new_line (string replace -r '^ {1,4}|^\t' '' -- "$new_line")
+            set -l after_len (string length -- "$new_line")
+            set line_removed (math "$line_removed + $before_len - $after_len")
+        end
+        set lines[$i] "$new_line"
+        set total_removed (math "$total_removed + $line_removed")
+        if test $i -eq $start_line
+            set start_line_removed $line_removed
+        end
+    end
+
     set -l new_buf (string join \n -- $lines)
     commandline -r -- "$new_buf"
+
+    if test $is_selected -eq 1
+        set -l new_min $min_pos
+        if test $min_pos -gt $line_starts[$start_line]
+            set new_min (math "max($line_starts[$start_line], $min_pos - $start_line_removed)")
+        end
+        set -l new_max (math "max($new_min, $max_pos - $total_removed)")
+
+        commandline -f end-selection
+        commandline -C $new_min
+        commandline -f begin-selection
+        set -l diff (math "$new_max - $new_min")
+        for i in (seq $diff)
+            commandline -f forward-char
+        end
+        set fish_bind_mode visual
+    else
+        set -l new_cur (math "max(0, $orig_cursor - $start_line_removed)")
+        commandline -C $new_cur
+        set fish_bind_mode default
+    end
+
     commandline -f repaint-mode
-    set fish_bind_mode default
 end
 
 function __fish_helix_get_surround_pair --argument-names char
@@ -1321,6 +1605,7 @@ $c_sec MOTIONS / SELECTIONS$c_reset
   $c_key e / E$c_desc        Select to next word / BIGWORD end$c_reset
   $c_key x$c_desc            Select current line (expand selection line by line)$c_reset
   $c_key X$c_desc            Extend selection to whole line$c_reset
+  $c_key Alt+x (\ex)$c_desc  Shrink selection to line bounds$c_reset
   $c_key %$c_desc            Select entire buffer$c_reset
   $c_key ;$c_desc            Collapse selection to single cursor$c_reset
   $c_key Alt-; (\e;)$c_desc  Swap selection anchor and cursor$c_reset
@@ -1328,6 +1613,7 @@ $c_sec MOTIONS / SELECTIONS$c_reset
   $c_key _$c_desc            Trim leading and trailing whitespace from selection$c_reset
   $c_key J$c_desc            Join lines with space (collapsing indentation)$c_reset
   $c_key Alt+J (\eJ)$c_desc  Join lines without space$c_reset
+  $c_key >, <$c_desc         Indent / Unindent line or multiline selection$c_reset
 
 $c_sec GOTO (g)$c_reset
   $c_key gh$c_desc           Go to start of line$c_reset
@@ -1640,6 +1926,7 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     # x in Helix selects line (NOT vim delete char!)
     bind --preset -M default x __fish_helix_select_line
     bind --preset -M default X __fish_helix_extend_to_line_bounds
+    bind --preset -M default \ex __fish_helix_shrink_to_line_bounds
     # % in Helix selects all buffer (NOT vim match bracket!)
     bind --preset -M default % 'commandline -f beginning-of-buffer begin-selection end-of-buffer repaint-mode; set fish_bind_mode visual'
     # ; collapses selection
@@ -1783,17 +2070,23 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     # ==========================================
     # --- Select / Extend Mode (visual) ---
     # ==========================================
+    # Digit counts for repeat motions in visual mode (1-9, and 0 when count already started)
+    for i in (seq 1 9)
+        bind --preset -M visual $i "__fish_helix_arg_digit $i"
+    end
+    bind --preset -M visual 0 "if test -n \"\$__fish_helix_count\"; __fish_helix_arg_digit 0; end"
+
     # Movements extend selection
-    bind --preset -M visual h backward-char
-    bind --preset -M visual l forward-char
-    bind --preset -M visual k up-line
-    bind --preset -M visual j down-line
+    bind --preset -M visual h __fish_helix_visual_h
+    bind --preset -M visual l __fish_helix_visual_l
+    bind --preset -M visual k __fish_helix_visual_k
+    bind --preset -M visual j __fish_helix_visual_j
     bind --preset -M visual w __fish_helix_visual_w
     bind --preset -M visual b __fish_helix_visual_b
-    bind --preset -M visual e forward-word-end
+    bind --preset -M visual e __fish_helix_visual_e
     bind --preset -M visual W __fish_helix_visual_W
     bind --preset -M visual B __fish_helix_visual_B
-    bind --preset -M visual E forward-bigword-end
+    bind --preset -M visual E __fish_helix_visual_E
 
     bind --preset -M visual f forward-jump
     bind --preset -M visual F backward-jump
@@ -1831,17 +2124,18 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     # Selection manipulation in visual mode
     bind --preset -M visual x __fish_helix_select_line
     bind --preset -M visual X __fish_helix_extend_to_line_bounds
+    bind --preset -M visual \ex __fish_helix_shrink_to_line_bounds
     bind --preset -M visual % 'commandline -f beginning-of-buffer begin-selection end-of-buffer repaint-mode'
-    bind --preset -M visual ';' 'commandline -f end-selection repaint-mode; set fish_bind_mode default'
+    bind --preset -M visual ';' 'set -g __fish_helix_count; commandline -f end-selection repaint-mode; set fish_bind_mode default'
     bind --preset -M visual \e\; 'commandline -f swap-selection-start-stop repaint-mode'
     bind --preset -M visual _ __fish_helix_trim_selection
     bind --preset -M visual \e: __fish_helix_ensure_forward_selection
     bind --preset -M visual J '__fish_helix_join_lines with_space; set fish_bind_mode default'
     bind --preset -M visual \eJ '__fish_helix_join_lines no_space; set fish_bind_mode default'
     bind --preset -M visual r __fish_helix_prepare_replace
-    bind --preset -M visual v 'commandline -f end-selection repaint-mode; set fish_bind_mode default'
-    bind --preset -M visual escape 'commandline -f end-selection repaint-mode; set fish_bind_mode default'
-    bind --preset -M visual ctrl-\[ 'commandline -f end-selection repaint-mode; set fish_bind_mode default'
+    bind --preset -M visual v 'set -g __fish_helix_count; commandline -f end-selection repaint-mode; set fish_bind_mode default'
+    bind --preset -M visual escape 'set -g __fish_helix_count; commandline -f end-selection repaint-mode; set fish_bind_mode default'
+    bind --preset -M visual ctrl-\[ 'set -g __fish_helix_count; commandline -f end-selection repaint-mode; set fish_bind_mode default'
 
     # Insert mode transitions from visual mode (Helix: i/a/I/A collapse selection and enter insert)
     bind --preset -M visual -m insert i 'commandline -f end-selection repaint-mode; set fish_bind_mode insert'
@@ -1862,6 +2156,10 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M visual \~ 'commandline -f togglecase-selection end-selection repaint-mode; set fish_bind_mode default'
     bind --preset -M visual \` 'commandline -f downcase-selection end-selection repaint-mode; set fish_bind_mode default'
     bind --preset -M visual \e\` 'commandline -f upcase-selection end-selection repaint-mode; set fish_bind_mode default'
+
+    # Indent / Unindent in visual mode
+    bind --preset -M visual \> __fish_helix_indent
+    bind --preset -M visual \< __fish_helix_unindent
 
 
     bind --preset -M visual u undo
