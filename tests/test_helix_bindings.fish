@@ -1471,6 +1471,159 @@ assert_contains "$test_cs_raw" "MATCH & SURROUND" "Cheatsheet contains match and
 assert_contains "$test_cs_raw" "EDITING & CLIPBOARD" "Cheatsheet contains editing and clipboard section"
 
 
+# ==============================================================================
+# --- Testing Phase 1: Visual Mode Counts, Alt-x Line Shrinking, & Multiline Indentation ---
+# ==============================================================================
+echo "--- Testing Phase 1: Visual Mode Counts, Alt-x Line Shrinking, & Multiline Indentation ---"
+
+# Alt-x bindings in default and visual mode
+set -l bind_alt_x_def (bind -M default \ex | string trim)
+assert_contains "$bind_alt_x_def" "__fish_helix_shrink_to_line_bounds" "Alt-x in default mode binds to shrink_to_line_bounds"
+
+set -l bind_alt_x_vis (bind -M visual \ex | string trim)
+assert_contains "$bind_alt_x_vis" "__fish_helix_shrink_to_line_bounds" "Alt-x in visual mode binds to shrink_to_line_bounds"
+
+# Visual mode indentation bindings (> and <)
+set -l bind_indent_vis (bind -M visual \> | string trim)
+assert_contains "$bind_indent_vis" "__fish_helix_indent" "> in visual mode binds to __fish_helix_indent"
+
+set -l bind_unindent_vis (bind -M visual \< | string trim)
+assert_contains "$bind_unindent_vis" "__fish_helix_unindent" "< in visual mode binds to __fish_helix_unindent"
+
+# Visual mode digit count bindings (1-9, 0)
+set -l bind_vis_1 (bind -M visual 1 | string trim)
+assert_contains "$bind_vis_1" "__fish_helix_arg_digit 1" "1 in visual mode binds to __fish_helix_arg_digit"
+
+set -l bind_vis_9 (bind -M visual 9 | string trim)
+assert_contains "$bind_vis_9" "__fish_helix_arg_digit 9" "9 in visual mode binds to __fish_helix_arg_digit"
+
+set -l bind_vis_0 (bind -M visual 0 | string trim)
+assert_contains "$bind_vis_0" "__fish_helix_arg_digit 0" "0 in visual mode binds to __fish_helix_arg_digit when count active"
+
+# Visual mode movement bindings
+set -l bind_vis_h (bind -M visual h | string trim)
+assert_contains "$bind_vis_h" "__fish_helix_visual_h" "h in visual mode binds to __fish_helix_visual_h"
+
+set -l bind_vis_l (bind -M visual l | string trim)
+assert_contains "$bind_vis_l" "__fish_helix_visual_l" "l in visual mode binds to __fish_helix_visual_l"
+
+set -l bind_vis_k (bind -M visual k | string trim)
+assert_contains "$bind_vis_k" "__fish_helix_visual_k" "k in visual mode binds to __fish_helix_visual_k"
+
+set -l bind_vis_j (bind -M visual j | string trim)
+assert_contains "$bind_vis_j" "__fish_helix_visual_j" "j in visual mode binds to __fish_helix_visual_j"
+
+set -l bind_vis_e (bind -M visual e | string trim)
+assert_contains "$bind_vis_e" "__fish_helix_visual_e" "e in visual mode binds to __fish_helix_visual_e"
+
+set -l bind_vis_E (bind -M visual E | string trim)
+assert_contains "$bind_vis_E" "__fish_helix_visual_E" "E in visual mode binds to __fish_helix_visual_E"
+
+# Functional: Alt-x (shrink_to_line_bounds) on partial multiline selection
+set -l test_shrink_multi (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r (printf '%s\n%s\n%s' 'line1' 'line2' 'line3')
+    # Mock selection from pos 2 (in line1) to pos 14 (in line3)
+    function commandline
+        if contains -- --selection-start \$argv
+            echo 2
+            return 0
+        else if contains -- --selection-end \$argv
+            echo 14
+            return 0
+        else if contains -- -s \$argv
+            echo 'line2'
+            return 0
+        end
+        builtin commandline \$argv
+    end
+    __fish_helix_shrink_to_line_bounds
+    echo (builtin commandline -C)
+" 2>&1 | tail -n 1 | string trim)
+# Line 2 starts at index 6 in 'line1\nline2\nline3'
+assert_equal "$test_shrink_multi" "6" "Alt-x shrinks partial multiline selection to line 2 start (pos 6)"
+
+# Functional: Alt-x on sub-line selection collapses selection
+set -l test_shrink_subline (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r 'hello world'
+    function commandline
+        if contains -- --selection-start \$argv
+            echo 2
+            return 0
+        else if contains -- --selection-end \$argv
+            echo 5
+            return 0
+        end
+        builtin commandline \$argv
+    end
+    __fish_helix_shrink_to_line_bounds
+    echo \$fish_bind_mode
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_shrink_subline" "default" "Alt-x on sub-line selection collapses selection to default mode"
+
+# Functional: Indent multiline selection
+set -l test_indent_multi (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r (printf '%s\n%s\n%s' 'echo 1' 'echo 2' 'echo 3')
+    function commandline
+        if contains -- --selection-start \$argv
+            echo 0
+            return 0
+        else if contains -- --selection-end \$argv
+            echo 12
+            return 0
+        end
+        builtin commandline \$argv
+    end
+    __fish_helix_indent
+    builtin commandline -b
+" 2>&1 | tail -n 3)
+set -l expected_indent_multi (printf '%s\n%s\n%s' '    echo 1' '    echo 2' 'echo 3')
+assert_equal "$test_indent_multi" "$expected_indent_multi" "> indents all lines within multiline selection"
+
+# Functional: Indent with repeat count (2>)
+set -l test_indent_count (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r 'echo single'
+    commandline -C 0
+    __fish_helix_arg_digit 2
+    __fish_helix_indent
+    builtin commandline -b
+" 2>&1 | tail -n 1)
+assert_equal "$test_indent_count" "        echo single" "2> indents line by 8 spaces"
+
+# Functional: Unindent multiline selection
+set -l test_unindent_multi (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r (printf '%s\n%s\n%s' '    line1' '    line2' 'line3')
+    function commandline
+        if contains -- --selection-start \$argv
+            echo 0
+            return 0
+        else if contains -- --selection-end \$argv
+            echo 18
+            return 0
+        end
+        builtin commandline \$argv
+    end
+    __fish_helix_unindent
+    builtin commandline -b
+" 2>&1 | tail -n 3)
+set -l expected_unindent_multi (printf '%s\n%s\n%s' 'line1' 'line2' 'line3')
+assert_equal "$test_unindent_multi" "$expected_unindent_multi" "< unindents all lines within multiline selection"
+
+# Functional: 3x selects 3 lines
+set -l test_3x (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r (printf '%s\n%s\n%s' 'alpha' 'beta' 'gamma')
+    commandline -C 0
+    __fish_helix_arg_digit 3
+    __fish_helix_select_line
+    echo \$fish_bind_mode
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_3x" "visual" "3x enters visual mode selecting lines"
+
 echo
 echo "================================================="
 echo "Results: $passed Passed, $failed Failed"

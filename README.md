@@ -77,6 +77,7 @@ In Helix Normal mode, movements **select/replace** the range. Pressing `d` delet
 | `n` / `N` | Cycle backward / forward through matching history commands (`search_next`/`prev`) |
 | `x` | Select current line (including newline); pressing `x` again extends to the next line (`extend_line_below`) |
 | `X` | Extend selection to whole line bounds (`extend_to_line_bounds`) |
+| `Alt+x` | Shrink selection to line bounds (`shrink_to_line_bounds`) |
 | `%` | Select entire command line buffer |
 | `1`–`9`, `0` | Numeric count prefixes for repeat motions (e.g. `3w`, `2x`, `5h`) |
 
@@ -98,8 +99,11 @@ Entered with `v`, `x`, or `%`. In this mode, movements **extend** the selection 
 | `gh` / `gl` | `extend_line_bounds` | Extend selection to start / end of line |
 | `gg` / `ge` | `extend_buffer_bounds` | Extend selection to top / end of buffer |
 | `mm` | `extend_match_bracket`| Extend selection to matching bracket |
-| `x` | `extend_line_below` | Extend selection down by one full line |
+| `x` | `extend_line_below` | Extend selection down by one full line (or `N` lines with count prefix `Nx`) |
 | `X` | `extend_to_line_bounds`| Extend selection to line boundaries |
+| `Alt+x` | `shrink_to_line_bounds`| Shrink selection to full line boundaries |
+| `>` / `<` | `indent / unindent` | Indent / Unindent selected lines by 4 spaces |
+| `1`–`9`, `0` | `count_prefix` | Numeric count prefixes for extending motions (e.g. `3w`, `2x`, `5l`) |
 | `;` | `collapse_selection` | Collapse selection and return to `Normal` mode |
 | `Alt+;` | `flip_selections` | Swap selection anchor and cursor head |
 | `v` / `Escape` | `exit_select_mode` | Exit Select mode and return to `Normal` mode |

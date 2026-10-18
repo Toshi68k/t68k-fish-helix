@@ -34,6 +34,7 @@ $c_sec MOTIONS / SELECTIONS$c_reset
   $c_key e / E$c_desc        Select to next word / BIGWORD end$c_reset
   $c_key x$c_desc            Select current line (expand selection line by line)$c_reset
   $c_key X$c_desc            Extend selection to whole line$c_reset
+  $c_key Alt+x (\ex)$c_desc  Shrink selection to line bounds$c_reset
   $c_key %$c_desc            Select entire buffer$c_reset
   $c_key ;$c_desc            Collapse selection to single cursor$c_reset
   $c_key Alt-; (\e;)$c_desc  Swap selection anchor and cursor$c_reset
@@ -41,6 +42,7 @@ $c_sec MOTIONS / SELECTIONS$c_reset
   $c_key _$c_desc            Trim leading and trailing whitespace from selection$c_reset
   $c_key J$c_desc            Join lines with space (collapsing indentation)$c_reset
   $c_key Alt+J (\eJ)$c_desc  Join lines without space$c_reset
+  $c_key >, <$c_desc         Indent / Unindent line or multiline selection$c_reset
 
 $c_sec GOTO (g)$c_reset
   $c_key gh$c_desc           Go to start of line$c_reset
