@@ -3,6 +3,9 @@
 function __fish_helix_paste_after --argument-names reg --description 'Helix: paste register contents after cursor (p)'
     if test -z "$reg"
         set reg (__fish_helix_consume_register)
+    else
+        set -e __fish_helix_register
+        set -e __fish_helix_prev_mode
     end
     set -l count (__fish_helix_consume_count)
 
@@ -87,6 +90,9 @@ end
 function __fish_helix_paste_before --argument-names reg --description 'Helix: paste register contents before cursor (P)'
     if test -z "$reg"
         set reg (__fish_helix_consume_register)
+    else
+        set -e __fish_helix_register
+        set -e __fish_helix_prev_mode
     end
     set -l count (__fish_helix_consume_count)
 

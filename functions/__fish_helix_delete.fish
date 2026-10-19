@@ -1,6 +1,9 @@
 function __fish_helix_delete --argument-names reg --description 'Helix: delete selection or char under cursor (d)'
     if test -z "$reg"
         set reg (__fish_helix_consume_register)
+    else
+        set -e __fish_helix_register
+        set -e __fish_helix_prev_mode
     end
 
     set -l buf (commandline -b | string collect)

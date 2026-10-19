@@ -1,23 +1,29 @@
 # Register support for Helix keybindings
 
-function __fish_helix_select_register --description 'Helix: enter register selection mode (")'
-    set -g __fish_helix_prev_mode $fish_bind_mode
-    set fish_bind_mode helix_register
+function __fish_helix_select_register --argument-names mode --description 'Helix: enter register selection mode (")'
+    if test "$mode" = visual -o "$fish_bind_mode" = visual -o "$fish_bind_mode" = helix_register_visual
+        set -g __fish_helix_prev_mode visual
+        set fish_bind_mode helix_register_visual
+    else
+        set -g __fish_helix_prev_mode default
+        set fish_bind_mode helix_register
+    end
     commandline -f repaint-mode
 end
 
 function __fish_helix_set_active_register --argument-names reg --description 'Helix: activate selected register'
     set -g __fish_helix_register "$reg"
     set -l prev default
-    if set -q __fish_helix_prev_mode
-        set prev $__fish_helix_prev_mode
-        set -e __fish_helix_prev_mode
+    if set -q __fish_helix_prev_mode; and test "$__fish_helix_prev_mode" = visual
+        set prev visual
     end
+    set -e __fish_helix_prev_mode
     set fish_bind_mode $prev
     commandline -f repaint-mode
 end
 
 function __fish_helix_consume_register --description 'Helix: consume and reset active register'
+    set -e __fish_helix_prev_mode
     if set -q __fish_helix_register; and test -n "$__fish_helix_register"
         set -l reg $__fish_helix_register
         set -e __fish_helix_register
