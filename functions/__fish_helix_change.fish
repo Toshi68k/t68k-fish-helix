@@ -1,6 +1,9 @@
 function __fish_helix_change --argument-names reg --description 'Helix: change selection or char under cursor (c)'
     if test -z "$reg"
         set reg (__fish_helix_consume_register)
+    else
+        set -e __fish_helix_register
+        set -e __fish_helix_prev_mode
     end
 
     set -l buf (commandline -b | string collect)

@@ -1807,6 +1807,46 @@ set -l test_clipboard_on_plus_yank (fish -i --no-config -c "
 " 2>&1 | tail -n 1 | string trim)
 assert_equal "$test_clipboard_on_plus_yank" "1" "Setting + register invokes fish_clipboard_copy"
 
+# Functional Regression: Sequential register yanks do not contaminate or lag by one step
+set -l test_sequential_register_yanks (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    # Step 1: select register b from default mode and yank
+    commandline -r 'ls AGENTS.md'
+    commandline -C 0
+    __fish_helix_select_register default
+    __fish_helix_set_active_register 'b'
+    __fish_helix_yank
+    set -l reg_b1 (__fish_helix_get_register 'b')
+
+    # Step 2: select register c from default mode and yank AAA
+    commandline -r 'AAA'
+    commandline -C 0
+    __fish_helix_select_register default
+    __fish_helix_set_active_register 'c'
+    __fish_helix_yank
+    set -l reg_b2 (__fish_helix_get_register 'b')
+    set -l reg_c2 (__fish_helix_get_register 'c')
+
+    echo \"\$reg_b1:\$reg_b2:\$reg_c2\"
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_sequential_register_yanks" "l:l:A" "Sequential register yanks do not lag or contaminate previous register"
+
+# Functional Regression: Mode restoration when entering from bind modes
+set -l test_mode_restore (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    set -g fish_bind_mode helix_register
+    __fish_helix_select_register default
+    __fish_helix_set_active_register 'b'
+    set -l mode_after_default \$fish_bind_mode
+
+    set -g fish_bind_mode helix_register_visual
+    __fish_helix_select_register visual
+    __fish_helix_set_active_register 'c'
+    set -l mode_after_visual \$fish_bind_mode
+
+    echo \"\$mode_after_default:\$mode_after_visual\"
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_mode_restore" "default:visual" "__fish_helix_set_active_register restores default and visual modes correctly without mode lock"
 
 echo
 echo "================================================="

@@ -1,6 +1,9 @@
 function __fish_helix_replace_with_register --argument-names reg --description 'Helix: replace selection or char with register content (R)'
     if test -z "$reg"
         set reg (__fish_helix_consume_register)
+    else
+        set -e __fish_helix_register
+        set -e __fish_helix_prev_mode
     end
 
     if test "$reg" = '_'
@@ -42,6 +45,6 @@ function __fish_helix_replace_with_register --argument-names reg --description '
     commandline -f repaint-mode
 end
 
-function __fish_helix_replace_with_yanked --description 'Helix: replace selection or char with yanked text (R)'
-    __fish_helix_replace_with_register
+function __fish_helix_replace_with_yanked --argument-names reg --description 'Helix: replace selection or char with yanked text (R)'
+    __fish_helix_replace_with_register "$reg"
 end
