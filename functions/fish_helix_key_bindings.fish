@@ -657,7 +657,11 @@ end
 # --- Register Support Functions ---
 function __fish_helix_select_register --description 'Helix: enter register selection mode (")'
     set -g __fish_helix_prev_mode $fish_bind_mode
-    set fish_bind_mode helix_register
+    if test "$fish_bind_mode" = visual
+        set fish_bind_mode helix_register_visual
+    else
+        set fish_bind_mode helix_register
+    end
     commandline -f repaint-mode
 end
 
@@ -2112,7 +2116,7 @@ if not functions -q fish_helix_cursor
                 switch $varname
                     case fish_cursor_insert
                         __fish_cursor_xterm line
-                    case fish_cursor_visual fish_cursor_replace_one fish_cursor_helix_replace_one fish_cursor_helix_register
+                    case fish_cursor_visual fish_cursor_replace_one fish_cursor_helix_replace_one fish_cursor_helix_register fish_cursor_helix_register_visual
                         __fish_cursor_xterm underscore
                     case '*'
                         __fish_cursor_xterm $fish_cursor_unknown
@@ -2362,7 +2366,7 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M default \eJ '__fish_helix_join_lines no_space'
 
     # --- Normal Mode: Registers (") ---
-    bind --preset -M default '"' __fish_helix_select_register
+    bind --preset -M default -m helix_register '"' __fish_helix_select_register
 
     # --- Normal Mode: Changes & Deletions (Selection-First) ---
     # d deletes selection (or char under cursor if no selection)
@@ -2459,18 +2463,61 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M replace_one -m default '' 'set -e __fish_helix_replace_start; set -e __fish_helix_replace_len; set fish_bind_mode default; commandline -f repaint-mode'
     bind --preset -M helix_replace_one -m default '' 'set -e __fish_helix_replace_start; set -e __fish_helix_replace_len; set fish_bind_mode default; commandline -f repaint-mode'
 
-    # --- Register Selection Mode (") ---
+    # --- Register Selection Modes (") ---
     set -l reg_chars a b c d e f g h i j k l m n o p q r s t u v w x y z 0 1 2 3 4 5 6 7 8 9 '+' '*' '_' '"' '/' ':' '%'
     for r in $reg_chars
-        bind --preset -M helix_register $r "__fish_helix_set_active_register '$r'"
+        # Modal selection in Normal mode (returns to default mode)
+        bind --preset -M helix_register -m default $r "__fish_helix_set_active_register '$r'"
+        # Modal selection in Visual mode (returns to visual mode)
+        bind --preset -M helix_register_visual -m visual $r "__fish_helix_set_active_register '$r'"
+
+        # Direct chords / sequences (Normal mode)
+        set -l seq_r $r
+        if test "$r" = '*'
+            set seq_r '\*'
+        end
+        bind --preset -M default "\",$seq_r,y" "__fish_helix_yank '$r'"
+        bind --preset -M default "\",$seq_r,p" "__fish_helix_paste_after '$r'"
+        bind --preset -M default "\",$seq_r,P" "__fish_helix_paste_before '$r'"
+        bind --preset -M default "\",$seq_r,d" "__fish_helix_delete '$r'"
+        bind --preset -M default -m insert "\",$seq_r,c" "__fish_helix_change '$r'"
+        bind --preset -M default "\",$seq_r,R" "__fish_helix_replace_with_yanked '$r'"
+
+        # Direct chords / sequences (Visual mode)
+        bind --preset -M visual -m default "\",$seq_r,y" "__fish_helix_yank '$r'"
+        bind --preset -M visual -m default "\",$seq_r,p" "__fish_helix_paste_after '$r'"
+        bind --preset -M visual -m default "\",$seq_r,P" "__fish_helix_paste_before '$r'"
+        bind --preset -M visual -m default "\",$seq_r,d" "__fish_helix_delete '$r' # kill-selection"
+        bind --preset -M visual -m insert "\",$seq_r,c" "__fish_helix_change '$r' # kill-selection"
+        bind --preset -M visual -m default "\",$seq_r,R" "__fish_helix_replace_with_yanked '$r'"
     end
     for r in (string split ' ' -- 'A B C D E F G H I J K L M N O P Q R S T U V W X Y Z')
         set -l lower_r (string lower -- "$r")
-        bind --preset -M helix_register $r "__fish_helix_set_active_register '$lower_r'"
+        bind --preset -M helix_register -m default $r "__fish_helix_set_active_register '$lower_r'"
+        bind --preset -M helix_register_visual -m visual $r "__fish_helix_set_active_register '$lower_r'"
+
+        # Direct chords for uppercase
+        bind --preset -M default "\",$r,y" "__fish_helix_yank '$lower_r'"
+        bind --preset -M default "\",$r,p" "__fish_helix_paste_after '$lower_r'"
+        bind --preset -M default "\",$r,P" "__fish_helix_paste_before '$lower_r'"
+        bind --preset -M default "\",$r,d" "__fish_helix_delete '$lower_r'"
+        bind --preset -M default -m insert "\",$r,c" "__fish_helix_change '$lower_r'"
+        bind --preset -M default "\",$r,R" "__fish_helix_replace_with_yanked '$lower_r'"
+
+        bind --preset -M visual -m default "\",$r,y" "__fish_helix_yank '$lower_r'"
+        bind --preset -M visual -m default "\",$r,p" "__fish_helix_paste_after '$lower_r'"
+        bind --preset -M visual -m default "\",$r,P" "__fish_helix_paste_before '$lower_r'"
+        bind --preset -M visual -m default "\",$r,d" "__fish_helix_delete '$lower_r' # kill-selection"
+        bind --preset -M visual -m insert "\",$r,c" "__fish_helix_change '$lower_r' # kill-selection"
+        bind --preset -M visual -m default "\",$r,R" "__fish_helix_replace_with_yanked '$lower_r'"
     end
-    bind --preset -M helix_register escape 'set -e __fish_helix_register; set fish_bind_mode default; commandline -f repaint-mode'
-    bind --preset -M helix_register ctrl-\[ 'set -e __fish_helix_register; set fish_bind_mode default; commandline -f repaint-mode'
-    bind --preset -M helix_register '' 'set -e __fish_helix_register; set fish_bind_mode default; commandline -f repaint-mode'
+    bind --preset -M helix_register -m default escape 'set -e __fish_helix_register; set fish_bind_mode default; commandline -f repaint-mode'
+    bind --preset -M helix_register -m default ctrl-\[ 'set -e __fish_helix_register; set fish_bind_mode default; commandline -f repaint-mode'
+    bind --preset -M helix_register -m default '' 'set -e __fish_helix_register; set fish_bind_mode default; commandline -f repaint-mode'
+
+    bind --preset -M helix_register_visual -m visual escape 'set -e __fish_helix_register; set fish_bind_mode visual; commandline -f repaint-mode'
+    bind --preset -M helix_register_visual -m visual ctrl-\[ 'set -e __fish_helix_register; set fish_bind_mode visual; commandline -f repaint-mode'
+    bind --preset -M helix_register_visual -m visual '' 'set -e __fish_helix_register; set fish_bind_mode visual; commandline -f repaint-mode'
 
     # --- Match & Surround Sequences (Direct bindings for instant execution) ---
     # mm: Match Brackets
@@ -2559,7 +2606,7 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
     bind --preset -M visual m,m jump-to-matching-bracket
 
     # Selection manipulation in visual mode
-    bind --preset -M visual '"' __fish_helix_select_register
+    bind --preset -M visual -m helix_register_visual '"' __fish_helix_select_register
     bind --preset -M visual x __fish_helix_select_line
     bind --preset -M visual X __fish_helix_extend_to_line_bounds
     bind --preset -M visual \ex __fish_helix_shrink_to_line_bounds

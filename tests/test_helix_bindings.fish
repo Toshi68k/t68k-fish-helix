@@ -1663,6 +1663,26 @@ __fish_helix_set_active_register a
 assert_equal "$fish_bind_mode" "default" "__fish_helix_set_active_register restores previous mode default"
 assert_equal "$__fish_helix_register" "a" "__fish_helix_set_active_register sets active register to a"
 
+# Helper logic: visual mode transitions to helix_register_visual and back
+set -g fish_bind_mode visual
+__fish_helix_select_register
+assert_equal "$fish_bind_mode" "helix_register_visual" "__fish_helix_select_register in visual mode switches to helix_register_visual"
+assert_equal "$__fish_helix_prev_mode" "visual" "__fish_helix_select_register records visual mode"
+
+__fish_helix_set_active_register b
+assert_equal "$fish_bind_mode" "visual" "__fish_helix_set_active_register restores previous mode visual"
+assert_equal "$__fish_helix_register" "b" "__fish_helix_set_active_register sets active register to b from visual"
+
+# Direct chord bindings
+set -l bind_chord_by (bind -M default '",b,y' | string trim)
+assert_contains "$bind_chord_by" "__fish_helix_yank 'b'" "\",b,y in default mode directly yanks to register b"
+
+set -l bind_chord_bp (bind -M default '",b,p' | string trim)
+assert_contains "$bind_chord_bp" "__fish_helix_paste_after 'b'" "\",b,p in default mode directly pastes from register b"
+
+set -l bind_vis_chord_by (bind -M visual '",b,y' | string trim)
+assert_contains "$bind_vis_chord_by" "__fish_helix_yank 'b'" "\",b,y in visual mode directly yanks to register b"
+
 # Setting and getting registers
 __fish_helix_set_register "x" "hello register x"
 set -l val_x (__fish_helix_get_register "x")
@@ -1687,6 +1707,25 @@ set -l test_yank_reg (fish -i --no-config -c "
     __fish_helix_get_register 'a'
 " 2>&1 | tail -n 1 | string trim)
 assert_equal "$test_yank_reg" "world" "\"ay yanks selection into register a"
+
+# Functional: Direct chord "by yanks selection into register b
+set -l test_chord_yank_b (fish -i --no-config -c "
+    source $plugin_dir/functions/fish_helix_key_bindings.fish
+    commandline -r 'ls AGENTS.md'
+    function commandline
+        if contains -- --selection-start \$argv
+            echo 0
+            return 0
+        else if contains -- --selection-end \$argv
+            echo 12
+            return 0
+        end
+        builtin commandline \$argv
+    end
+    __fish_helix_yank 'b'
+    __fish_helix_get_register 'b'
+" 2>&1 | tail -n 1 | string trim)
+assert_equal "$test_chord_yank_b" "ls AGENTS.md" "\"by stores full selection in register b"
 
 # Functional: Paste from named register
 set -l test_paste_reg (fish -i --no-config -c "

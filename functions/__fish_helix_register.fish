@@ -2,7 +2,11 @@
 
 function __fish_helix_select_register --description 'Helix: enter register selection mode (")'
     set -g __fish_helix_prev_mode $fish_bind_mode
-    set fish_bind_mode helix_register
+    if test "$fish_bind_mode" = visual
+        set fish_bind_mode helix_register_visual
+    else
+        set fish_bind_mode helix_register
+    end
     commandline -f repaint-mode
 end
 
