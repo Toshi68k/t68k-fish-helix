@@ -2472,24 +2472,20 @@ function fish_helix_key_bindings --description 'Helix-like modal key bindings fo
         bind --preset -M helix_register_visual -m visual $r "__fish_helix_set_active_register '$r'"
 
         # Direct chords / sequences (Normal mode)
-        set -l seq_r $r
-        if test "$r" = '*'
-            set seq_r '\*'
-        end
-        bind --preset -M default "\",$seq_r,y" "__fish_helix_yank '$r'"
-        bind --preset -M default "\",$seq_r,p" "__fish_helix_paste_after '$r'"
-        bind --preset -M default "\",$seq_r,P" "__fish_helix_paste_before '$r'"
-        bind --preset -M default "\",$seq_r,d" "__fish_helix_delete '$r'"
-        bind --preset -M default -m insert "\",$seq_r,c" "__fish_helix_change '$r'"
-        bind --preset -M default "\",$seq_r,R" "__fish_helix_replace_with_yanked '$r'"
+        bind --preset -M default "\",$r,y" "__fish_helix_yank '$r'"
+        bind --preset -M default "\",$r,p" "__fish_helix_paste_after '$r'"
+        bind --preset -M default "\",$r,P" "__fish_helix_paste_before '$r'"
+        bind --preset -M default "\",$r,d" "__fish_helix_delete '$r'"
+        bind --preset -M default -m insert "\",$r,c" "__fish_helix_change '$r'"
+        bind --preset -M default "\",$r,R" "__fish_helix_replace_with_yanked '$r'"
 
         # Direct chords / sequences (Visual mode)
-        bind --preset -M visual -m default "\",$seq_r,y" "__fish_helix_yank '$r'"
-        bind --preset -M visual -m default "\",$seq_r,p" "__fish_helix_paste_after '$r'"
-        bind --preset -M visual -m default "\",$seq_r,P" "__fish_helix_paste_before '$r'"
-        bind --preset -M visual -m default "\",$seq_r,d" "__fish_helix_delete '$r' # kill-selection"
-        bind --preset -M visual -m insert "\",$seq_r,c" "__fish_helix_change '$r' # kill-selection"
-        bind --preset -M visual -m default "\",$seq_r,R" "__fish_helix_replace_with_yanked '$r'"
+        bind --preset -M visual -m default "\",$r,y" "__fish_helix_yank '$r'"
+        bind --preset -M visual -m default "\",$r,p" "__fish_helix_paste_after '$r'"
+        bind --preset -M visual -m default "\",$r,P" "__fish_helix_paste_before '$r'"
+        bind --preset -M visual -m default "\",$r,d" "__fish_helix_delete '$r' # kill-selection"
+        bind --preset -M visual -m insert "\",$r,c" "__fish_helix_change '$r' # kill-selection"
+        bind --preset -M visual -m default "\",$r,R" "__fish_helix_replace_with_yanked '$r'"
     end
     for r in (string split ' ' -- 'A B C D E F G H I J K L M N O P Q R S T U V W X Y Z')
         set -l lower_r (string lower -- "$r")
